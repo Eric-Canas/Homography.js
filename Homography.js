@@ -2,176 +2,350 @@ const availableTransforms = ['auto', 'piecewiseaffine', 'affine'];
 const dims = 2;
 
 class Homography {
-    constructor(w=400, h=400, transform = 'piecewiseaffine'){
-        this.w = w;
-        this.h = h;
+    constructor(w=null, h=null, transform = 'piecewiseaffine'){
+        if (w !== null) w = Math.round(w);
+        if (h !== null) h = Math.round(h);
+        // Width and Height refers to the input image. If width and height are given it will be resized.
+        this._w = w;
+        this._h = h;
+        this._objectiveW = null;
+        this._objectiveH = null;
+        this._srcPointsAreNormalized = true;
+        this._maxSrcX = null;
+        this._maxSrcY = null;
+        this._minSrcX = null;
+        this._minSrcY = null;
         this.firstTransformSelected = transform.toLowerCase();
         this.transform = transform.toLowerCase();
-        this.hiddenCanvas = document.createElement('canvas');
-        this.hiddenCanvas.width = w;
-        this.hiddenCanvas.height = h;
-        this.hiddenCanvas.style.display = 'hidden';
-        this.hiddenCanvasContext = this.hiddenCanvas.getContext("2d");
+        this._hiddenCanvas = document.createElement('canvas');
+        this._hiddenCanvas.width = w;
+        this._hiddenCanvas.height = h;
+        this._hiddenCanvas.style.display = 'hidden';
+        this._hiddenCanvasContext = this._hiddenCanvas.getContext("2d");
+        this._srcPoints = null;
+        this._dstPoints = null;
         // Used to avoid new memory allocation
-        this.auxSrcTriangle = new Int16Array(3*dims);
-        this.auxDstTriangle = new Int16Array(3*dims);
+        this._auxSrcTriangle = new Int16Array(3*dims);
+        this._auxDstTriangle = new Int16Array(3*dims);
+        this._HTMLImage = null;
+        this._image = null;
+        this._trianglesCorrespondencesMatrix = null;
 
     }
-
-    setSourcePoints(points){
-        //TODO: Currently, it does not accept normalized coordinates
+    /**
+     * Set the source points ([[x1, y1], [x2, y2]]) of the transform and, optionally, the image that will be transformed.
+     * 
+     * @param {ArrayBuffer | Array} points   Source points of the transform, given as a BufferArray or Array in the form [x1, y1, x2, y2...]
+     *                                       or [[x1, y1], [x2, y2]...]. These source points should be declared in image coordinates, (x : [0, width],
+     *                                       y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]);
+     * @param {HTMLImageElement}    [image]  Optional source image, that will be warped later. Setting this element here will improve the
+     *                                       warping performance when it is planned to apply multiple transformations (same source points
+     *                                       different destiny points) to the same image, specially when source image have a transparent background.
+     * @param {Number}              [width]  Only applied if image parameter is provided. Internally resizes the image to the given width. If not provided,
+     *                                       original image width will be used (widths lowers than the original image will improve speed at cost of resolution).
+     * @param {Number}              [height] Only applied if image parameter is provided. Internally resizes the image to the given height. If not provided,
+     *                                       original image height will be used (heights lowers than the original image will improve speed at cost of resolution).
+     */
+    setSourcePoints(points, image = null, width = null, height = null){
         // If it is given as a list, transform it to an Int16Array for improving performance.
         if(!ArrayBuffer.isView(points)) points = new Int16Array(points.flat())
-        this.srcPoints = points;
-        this.checkAndSelectTransform();
-        if (this.transform === 'piecewiseaffine'){
-            this.build_triangles();
+        this._srcPoints = points;
+        this._srcPointsAreNormalized = !containsValueGreaterThan(this._srcPoints, 1.0);
+
+        // Verifies if the selected transform is coherent with the srcPoints given, or select the best one if 'auto' is selected.
+        this.transform = checkAndSelectTransform(this.firstTransformSelected, this._srcPoints);
+
+        // Set the image if given
+        if (image !== null){
+            this.setImage(image, width, height);
+        // In case that there were no image given but height and width, apply it.
+        } else if (width !== null || height !== null){
+            this.setSrcWidthHeight(width, height);
         }
-        //this.piecewiseAffineTransform();
-        //this.faceMeshMap.onload = this.onLoadMeshMap.bind(this, w, h);
-    }
-    /*
-    reescalePoints(points, w=400, h=400){
-        for (let i = 0; i<points.length; i++){
-            points[i][0] *= w;
-            points[i][1] *= h;
+
+        if (this.transform === 'piecewiseaffine' && !this._srcPointsAreNormalized && this._trianglesCorrespondencesMatrix === null){
+            this.setAffineTransformParameters();
         }
-        return points;
-    }*/
-    checkAndSelectTransform(){
-        /**
-         * Verifies that this.srcPoints is in accordance with the selected transform, or select one transform if 'auto' 
-         */
-        if (this.transform === 'auto'){
-            if (this.srcPoints.length === 3*dims) this.transform = 'affine';
-            else if (this.srcPoints.length > 3*dims) this.transform = 'piecewiseaffine';
-            //TODO: Select best transform
-        } else if (this.transform === 'piecewiseaffine'){
-            // If it have only 3 points it is an affine transform.
-            if (this.srcPoints.length === 3*dims){
-                this.transform = 'affine';
-                console.warn('Only 3 source points given but "piecewiseAffine" transform selected. Transform changed to "affine".');
-            } else if (this.srcPoints.length < 3*dims){
-                throw(`A piecewise (or affine) transform needs to determine least three reference points but only ${this.srcPoints.length/dims} were given`);
-            }
-        } else if (this.transform === 'affine'){
-            if (this.srcPoints.length !== 3*dims){
-                throw(`An affine transform needs to determine exactly three reference points but ${this.srcPoints.length/dims} were given`)
-            }
-        }
-    }
-    build_triangles(){
-        this.triangles = Delaunay(this.srcPoints);
-        this.trianglesCorrespondencesMatrix = this.buildTrianglesCorrespondencesMatrix();
     }
 
-    setDstPoints(dstPoints){
-        if (this.transform === 'piecewiseaffine') this.piecewiseMatrices = this.piecewiseAffineTransform(dstPoints.flat());
+    /**
+     * Set the image that will be transformed later. Internally, it implies that the source points will be rescaled to the new image shape
+     * in case that they were given as normalized.
+     * 
+     * @param {HTMLImageElement}  image    Image that will internally saved for future warping. Although it is not necessary to be priorly setted,
+     *                                     setting it from the very beginning will improve the performance of future steps, specially when multiple
+     *                                     warpings will be applied to the same image.
+     * @param {Number}            [width]  Optional width. Resizes the image to the given width. If not provided, original image width will be used
+     *                                     (widths lowers than the original image width will improve speed at cost of resolution).
+     * @param {Number}            [height] Optional height. Resizes the image to the given height. If not provided, original image height will be used
+     *                                     (heights lowers than the original image height will improve speed at cost of resolution).
+     */
+    setImage(image, width = null, height = null){
+        // Set the current width and height of the image
+        if (this._w === null || this._h === null)
+            this.setSrcWidthHeight((width === null? image.width : width), (height === null? image.height : height));
+        this._HTMLImage = image;
+        this._image = this._getImageAsRGBAArray(image);
+        // If source points are already set
+        if(this._srcPoints !== null){
+            // Transform to image coordinates if normalized coordinates were given
+            if (this._srcPointsAreNormalized){
+                denormalizePoints(this._srcPoints, this._w, this._h);
+                this._srcPointsAreNormalized = false;
+            }
+            // If piecewiseaffine transform is (and sourcePoints are set) prepare the auxiliar matrices for this transform
+            if (this.transform === 'piecewiseaffine' && this._trianglesCorrespondencesMatrix === null){
+                this.setAffineTransformParameters();
+            }
+        }
+    }
+
+    setAffineTransformParameters(){
+        // Set the maxSrcX and maxSrcY. By the program logic, if it happens it is ensured that it did not happen in setSourcePoints(points) function
+        [this._minSrcX, this._minSrcY, this._maxSrcX, this._maxSrcY] = minmaxXYofArray(this._srcPoints);     
+        this._build_triangles();
+    }
+
+    setSrcWidthHeight(width, height){
+        const last_width = this._w;
+        const last_height = this._h;
+        this._w = width;
+        this._h = height;
+        if(last_width !== width || last_height !== height){
+            width = Math.round(width);
+            height = Math.round(height) 
+            this._hiddenCanvas.width = width;
+            this._hiddenCanvas.height = height; 
+            if(this._srcPoints !== null && this._srcPointsAreNormalized){
+                denormalizePoints(this._srcPoints, this._w, this._h);
+                this._srcPointsAreNormalized = false;
+                // If piecewiseaffine transform is (and sourcePoints are set) prepare the auxiliar matrices for this transform
+                if (this.transform === 'piecewiseaffine' && this._trianglesCorrespondencesMatrix === null){
+                    this.setAffineTransformParameters();
+                }       
+            }
+            // Resize the image if necessary
+            if(this._image !== null && this._HTMLImage !== null){
+                this._image = this._getImageAsRGBAArray(this._HTMLImage);
+            }
+        }
+
+    }
+
+    /**
+     * Only useful for Piecewise Affine transform. Defines a mesh of triangles connecting each trio of closest points and generates a matrix with the size of
+     * this mesh defining to which of these triangles belongs each coordinate. 
+     */
+    _build_triangles(){
+        // Generate the triangles from the Delaunay method
+        this._triangles = Delaunay(this._srcPoints);
+        // Calculate a matrix determining from which triangle comes each coordinate of the image.
+        this._trianglesCorrespondencesMatrix = this.buildTrianglesCorrespondencesMatrix();
+    }
+
+    /**
+     * Set the destiny points ([[x1, y1], [x2, y2]]). Internally, it means that the corresponding transform matrices are calculated. Slight performance
+     * improvement comes when width and height parameters are given, but take into account that outputs widths greaters than the source width could 
+     * imply artifacts in the output image (this problem will be solved in future updates).
+     * 
+     * @param {ArrayBuffer | Array} points   Destiny points of the transform, given as a BufferArray or Array in the form [x1, y1, x2, y2...]
+     *                                       or [[x1, y1], [x2, y2]...]. These source points should be declared in image coordinates, (x : [0, width],
+     *                                       y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]);
+     * @param {Number}              [width]  Optional width. Only used if normalized coords were given. Expected width of the output image, 
+     *                                       if not given the maximum of the points array will be used as width.
+     * @param {Number}              [height] Optional height. Only used if normalized coords were given. Expected height of the output image, 
+     *                                       if not given the maximum of the points array will be used as height.
+     */
+    setDstPoints(points, width = null, height = null){
+        // Transform it to a typed array for perfomance reasons
+        if(!ArrayBuffer.isView(points)) points = new Int16Array(points.flat());
+        // Verify that these points matches with the source points
+        if(points.length !== this._srcPoints.length) 
+            throw(`It must be the same amount of destiny points (${points.length/dims}) than source points (${this._srcPoints.length/dims})`);
+
+        this._dstPoints = points;
+        this._isDstArrayNormalized = !containsValueGreaterThan(this._dstPoints, 1.0);
         
-    }
+        // Induce the width and height if not given. 
+        if ((width === null || height === null)){
+            // Improve this function
+            this.induceBestObjectiveWidthAndHeight();
+        // Or set them if given
+        } else {
+            this._objectiveW = Math.round(width);
+            this._objectiveH = Math.round(height);
+        }
 
-    piecewiseAffineTransform(dstPoints){
-        let piecewiseMatrices = []
-        for(const triangle of this.triangles){
+        // Transform the points to image coordinates if normalized coordinates were given
+        if (this._isDstArrayNormalized){
+            denormalizePoints(this._dstPoints, this._objectiveW, this._objectiveH);
+            this._isDstArrayNormalized = false;
+        }
+
+        // Apply the selected transformation
+        if (this.transform === 'piecewiseaffine'){
+             this.piecewiseMatrices = this._calculatePiecewiseAffineTransformMatrices(points);
+        }
+    }
+    
+    _calculatePiecewiseAffineTransformMatrices(dstPoints){
+        let piecewiseMatrices = [];
+        for(const triangle of this._triangles){
             // Set in the already allocated memory for doing it faster and keep it as an Int16Array (It would be nice to check other options (including async function))
             //Set the srcTriangle
-            this.auxSrcTriangle[0] = this.srcPoints[triangle[0]*dims]; this.auxSrcTriangle[1] = this.srcPoints[triangle[0]*dims+1];
-            this.auxSrcTriangle[2] = this.srcPoints[triangle[1]*dims]; this.auxSrcTriangle[3] = this.srcPoints[triangle[1]*dims+1];
-            this.auxSrcTriangle[4] = this.srcPoints[triangle[2]*dims]; this.auxSrcTriangle[5] = this.srcPoints[triangle[2]*dims+1];
+            this._auxSrcTriangle[0] = this._srcPoints[triangle[0]*dims]; this._auxSrcTriangle[1] = this._srcPoints[triangle[0]*dims+1];
+            this._auxSrcTriangle[2] = this._srcPoints[triangle[1]*dims]; this._auxSrcTriangle[3] = this._srcPoints[triangle[1]*dims+1];
+            this._auxSrcTriangle[4] = this._srcPoints[triangle[2]*dims]; this._auxSrcTriangle[5] = this._srcPoints[triangle[2]*dims+1];
             //Set the dstTriangle
-            this.auxDstTriangle[0] = dstPoints[triangle[0]*dims]; this.auxDstTriangle[1] = dstPoints[triangle[0]*dims+1];
-            this.auxDstTriangle[2] = dstPoints[triangle[1]*dims]; this.auxDstTriangle[3] = dstPoints[triangle[1]*dims+1];
-            this.auxDstTriangle[4] = dstPoints[triangle[2]*dims]; this.auxDstTriangle[5] = dstPoints[triangle[2]*dims+1];
+            this._auxDstTriangle[0] = dstPoints[triangle[0]*dims]; this._auxDstTriangle[1] = dstPoints[triangle[0]*dims+1];
+            this._auxDstTriangle[2] = dstPoints[triangle[1]*dims]; this._auxDstTriangle[3] = dstPoints[triangle[1]*dims+1];
+            this._auxDstTriangle[4] = dstPoints[triangle[2]*dims]; this._auxDstTriangle[5] = dstPoints[triangle[2]*dims+1];
             
-            piecewiseMatrices.push(affineMatrixFromTriangles(this.auxSrcTriangle, this.auxDstTriangle))
+            piecewiseMatrices.push(affineMatrixFromTriangles(this._auxSrcTriangle, this._auxDstTriangle))
         }
         return piecewiseMatrices;
     }
 
-    onLoadMeshMap(w, h){
-        this.coords_map = this.buildTrianglesCorrespondencesMatrix();
-        this.warp(this.faceMeshMap);
+    induceBestObjectiveWidthAndHeight(){
+        // TODO: Do it when this._w, and this._h are not setted
+        // Or check for which would be the minimum and the maximum point of the transformed image
+        if (this._isDstArrayNormalized){
+            console.warn("Array of destiny points is normalized, but width and height parameters are not given. "+
+                         "Width and Height of the source will be used but it could be undesired in some cases.");
+            
+            this._objectiveW = this._w;
+            this._objectiveH = this._h;
+        } else {
+            [ , , this._objectiveW, this._objectiveH] = minmaxXYofArray(this._dstPoints);
+        }
     }
 
-    warp(image){
-        const rgba_size = 4;
-        image = this.getImageAsRGBAArray(image);
-        let output_img = new Uint8ClampedArray(image.length).fill(0); //Change to set as the image after debugging
-        for (let h = 0; h < this.h; h++){
-            for (let w = 0; w < this.w; w++){
-                const inTriangle = this.trianglesCorrespondencesMatrix[h*this.w+w]
-                if (inTriangle > -1){
-                    const idx = h*this.w*rgba_size+w*rgba_size;
-                    let [newX, newY] = applyTransformToPoint(this.piecewiseMatrices[inTriangle], w, h);//TransformationMatrix.applyToPoint(this.piecewiseMatrices[inTriangle], [w, h]);
-                    newX = Math.round(newX); newY = Math.round(newY);
-                    const newIdx = newY*this.w*rgba_size+newX*rgba_size;
-                    output_img[newIdx] = image[idx], output_img[newIdx+1] = image[idx+1], output_img[newIdx+2] = image[idx+2], output_img[newIdx+3] = 255; 
-                }
-            }     
-        } 
+    /**
+     * Apply the calculated homography to the given image. If no image is passed to the function and it was setted before the call of warp (recommended
+     * for performance reasons) warps the pre-setted image. In case that image is given it will be internally setted, so any future call to warp() receiving
+     * no parameters will apply the transformation over this image again (It will be usually useful when the same image is being constantly adapted to, for example,
+     * detections coming from a video stream).
+     * 
+     * @param {HTMLImageElement}  [image]  Image that will transformed. If this parameter is not given since image was previously setted through `setImage(img)` or
+     *                                     `setSrcPoints(points, img)`, this previously setted image will be the one that will be warped. If an image is given,
+     *                                      it will be internally setted, so any future call to warp for transforming the same image could avoid to pass this image
+     *                                      parameter again. This reuse of the image, if applicable, would speed up the transformation.
+     * 
+     * @return {ImageData}        Transformed image in format ImageData. It can be directly drawn in a canvas by using context.putImageData(img, x, y). For converting
+     *                            it to HTMLImageElement you can use HTMLImageElementFromImageData(img) (please note that  HTMLImageElementFromImageData(img) returns
+     *                            a promise).
+     */
+
+    warp(image = null){
+        if (image !== null){
+            this.setImage(image);
+        } else if (this._image === null){
+            throw("warp() must receive an image if it was not setted before through `setImage(img)` or  `setSrcPoints(points, img)`");
+        }
+        let output_img;
+        switch(this.transform){
+            case 'piecewiseaffine':
+                output_img = this._piecewiseAffineWarp(this._image)
+        
+        }
+         
         return output_img;
     }
 
+    _piecewiseAffineWarp(image){
+        const triangleCorrespondenceMatrixWidth = this._maxSrcX-this._minSrcX;
+        // output_img starts as a fully transparent image (the whole alpha channel is filled with 0.
+        let output_img = new Uint8ClampedArray(image.length); //Change to set as the image after debugging
+        //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
+        
+        for (let y = this._minSrcY; y < this._maxSrcY; y++){
+            for (let x = this._minSrcX; x < this._maxSrcX; x++){
+                const inTriangle = this._trianglesCorrespondencesMatrix[(y-this._minSrcY)*triangleCorrespondenceMatrixWidth+(x-this._minSrcX)]
+                if (inTriangle > -1){
+                    //Get the index of y, x coordinate in the source image ArrayBuffer
+                    const idx = y*this._w*4+x*4;
+                    let [newX, newY] = applyTransformToPoint(this.piecewiseMatrices[inTriangle], x, y);
+                    newX = Math.round(newX); newY = Math.round(newY);
+                    //Get the index of y, x coordinate in the output image ArrayBuffer
+                    const newIdx = newY*this._objectiveW*4+newX*4;
+                    output_img[newIdx] = image[idx], output_img[newIdx+1] = image[idx+1],
+                    output_img[newIdx+2] = image[idx+2], output_img[newIdx+3] = image[idx+3]; 
+                }
+            }    
+        }
+        return output_img;
+    }
+     
+    // TODO: Improve how the pads works here
     buildTrianglesCorrespondencesMatrix(method='circumscribed'){
-        // TODO: TIME SPENT IS HEREEE! Solve it;
-        this.trianglesCorrespondencesMatrix = new Int16Array(this.w* this.h).fill(-1);
+        // TODO: TIME SPENT IS HEREEE! Think about a better method
+        this._trianglesCorrespondencesMatrix = new Int16Array((this._maxSrcX-this._minSrcX)*(this._maxSrcY - this._minSrcY)).fill(-1);
         switch(method){
             case 'floodFill':
-                for (const [i, triangle] of Object.entries(this.triangles)){
-                    this.auxSrcTriangle[0] = this.srcPoints[triangle[0]*dims]; this.auxSrcTriangle[1] = this.srcPoints[triangle[0]*dims+1];
-                    this.auxSrcTriangle[2] = this.srcPoints[triangle[1]*dims]; this.auxSrcTriangle[3] = this.srcPoints[triangle[1]*dims+1];
-                    this.auxSrcTriangle[4] = this.srcPoints[triangle[2]*dims]; this.auxSrcTriangle[5] = this.srcPoints[triangle[2]*dims+1];
-                    this.fillByFloodFill(this.auxSrcTriangle, i)
+                for (const [i, triangle] of Object.entries(this._triangles)){
+                    this._auxSrcTriangle[0] = this._srcPoints[triangle[0]*dims]; this._auxSrcTriangle[1] = this._srcPoints[triangle[0]*dims+1];
+                    this._auxSrcTriangle[2] = this._srcPoints[triangle[1]*dims]; this._auxSrcTriangle[3] = this._srcPoints[triangle[1]*dims+1];
+                    this._auxSrcTriangle[4] = this._srcPoints[triangle[2]*dims]; this._auxSrcTriangle[5] = this._srcPoints[triangle[2]*dims+1];
+                    this.fillByFloodFill(this._auxSrcTriangle, i)
                 }
                 break;
             case 'circumscribed':
-                for (const [i, triangle] of Object.entries(this.triangles)){
+                for (const [i, triangle] of Object.entries(this._triangles)){
                     //Set the srcTriangle
-                    this.auxSrcTriangle[0] = this.srcPoints[triangle[0]*dims]; this.auxSrcTriangle[1] = this.srcPoints[triangle[0]*dims+1];
-                    this.auxSrcTriangle[2] = this.srcPoints[triangle[1]*dims]; this.auxSrcTriangle[3] = this.srcPoints[triangle[1]*dims+1];
-                    this.auxSrcTriangle[4] = this.srcPoints[triangle[2]*dims]; this.auxSrcTriangle[5] = this.srcPoints[triangle[2]*dims+1];
-                    this.fillByCircumscribedRectangle(this.auxSrcTriangle, i);
+                    this._auxSrcTriangle[0] = this._srcPoints[triangle[0]*dims]; this._auxSrcTriangle[1] = this._srcPoints[triangle[0]*dims+1];
+                    this._auxSrcTriangle[2] = this._srcPoints[triangle[1]*dims]; this._auxSrcTriangle[3] = this._srcPoints[triangle[1]*dims+1];
+                    this._auxSrcTriangle[4] = this._srcPoints[triangle[2]*dims]; this._auxSrcTriangle[5] = this._srcPoints[triangle[2]*dims+1];
+                    this.fillByCircumscribedRectangle(this._auxSrcTriangle, i);
                 }
                 break;
         }
         
         /*
         let asMatrix = [];
-        for(let h = 0; h < this.h; h++){
+        for(let h = 0; h < this._h; h++){
             let row = [];
-            for(let w = 0; w < this.w; w++){
-                row.push(this.trianglesCorrespondencesMatrix[h*this.w+w])
+            for(let w = 0; w < this._w; w++){
+                row.push(this._trianglesCorrespondencesMatrix[h*this._w+w])
             }
             asMatrix.push(row)
         }
-
-        console.table(asMatrix);*/
-    
-       return this.trianglesCorrespondencesMatrix;
+        console.table(asMatrix);
+        console.log(asMatrix);*/
+       return this._trianglesCorrespondencesMatrix;
     }
 
-    getImageAsRGBAArray(image){
-        this.hiddenCanvasContext.clearRect(0, 0, this.w, this.h);
-        this.hiddenCanvasContext.drawImage(image, 0, 0, this.w, this.h); //image.width, image.height);
-        const imageRGBA = this.hiddenCanvasContext.getImageData(0, 0, this.w, this.h);
+    _getImageAsRGBAArray(image){
+
+        this._hiddenCanvasContext.clearRect(0, 0, this._w, this._h);
+        this._hiddenCanvasContext.drawImage(image, 0, 0, this._w, this._h); //image.width, image.height);
+        const imageRGBA = this._hiddenCanvasContext.getImageData(0, 0, this._w, this._h);
         return imageRGBA.data;
     }
     
-    getImageFromRGBAArray(array){// Obtain a blob: URL for the image data.
-        const imgData = new ImageData(array, this.w, this.h);
-        this.hiddenCanvasContext.clearRect(0, 0, this.w, this.h);
-        this.hiddenCanvasContext.putImageData(imgData, 0, 0);
+    async HTMLImageElementFromImageData(array, asPromise = true){// Obtain a blob: URL for the image data.
+        const imgData = new ImageData(array, this._w, this._h);
+        this._hiddenCanvasContext.clearRect(0, 0, this._w, this._h);
+        this._hiddenCanvasContext.putImageData(imgData, 0, 0);
         let img = document.createElement('img')
-        img.src = this.hiddenCanvas.toDataURL();
-        return img;
+        img.src = this._hiddenCanvas.toDataURL();
+        if (asPromise){
+            return new Promise((resolve, reject) => {
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+            });
+        } else {
+            return img;
+        }
     }
 
     fillByCircumscribedRectangle(triangle, idx){
         const rectangle = rectangleCircunscribingTriangle(triangle);
+        //Set the the width to manage the offset of the matrix
+        const trianglesCorrespondencesMatrixWidth = this._maxSrcX-this._minSrcX;
         for (let x = rectangle.x; x < rectangle.width; x++){
             for (let y = rectangle.y; y < rectangle.height; y++){
                 if (pointInTriangle(x, y, triangle)){
-                    this.trianglesCorrespondencesMatrix[y * this.w + x] = idx;
+                    this._trianglesCorrespondencesMatrix[(y-this._minSrcY) * trianglesCorrespondencesMatrixWidth + (x-this._minSrcX)] = idx;
                 }
             }
         }
@@ -179,9 +353,9 @@ class Homography {
 
     fillByFloodFill(triangle, idx){
         const point = [Math.round(triangle[0]), Math.round(triangle[1])];
-        if (point[0] == this.w) point[0]-=1;
-        if (point[1] == this.h) point[1]-=1;
-        this.trianglesCorrespondencesMatrix[point[0]*this.w+point[1]] = idx;
+        if (point[0] == this._w) point[0]-=1;
+        if (point[1] == this._h) point[1]-=1;
+        this._trianglesCorrespondencesMatrix[point[0]*this._w+point[1]] = idx;
         // North
         this.floodFill(triangle, [point[0], point[1]-1], idx);
         // South
@@ -193,10 +367,10 @@ class Homography {
     }
 
     floodFill(triangle, point, idx){
-        const index = point[0]*this.w+point[1];
-        if(this.trianglesCorrespondencesMatrix[index] < 0 && 
+        const index = point[0]*this._w+point[1];
+        if(this._trianglesCorrespondencesMatrix[index] < 0 && 
             pointInTriangle(point[0], point[1], triangle)){
-            this.trianglesCorrespondencesMatrix[index] = idx;
+            this._trianglesCorrespondencesMatrix[index] = idx;
              // North
             this.floodFill(triangle, [point[0], point[1]-1], idx);
             // South
@@ -210,7 +384,6 @@ class Homography {
 
 }
 export {Homography}
-
 
 function Delaunay(points){
     /*Import library from <script src="https://unpkg.com/delaunator@5.0.0/delaunator.min.js"></script>*/
@@ -270,6 +443,29 @@ function affineMatrixFromTriangles(srcTriangle, dstTriangle){
 
 }
 
+function checkAndSelectTransform(transform, points){
+    /**
+     * Verifies that this.srcPoints is in accordance with the selected transform, or select one transform if 'auto' 
+     */
+    if (transform === 'auto'){
+        if (points.length === 3*dims) transform = 'affine';
+        else if (points.length > 3*dims) transform = 'piecewiseaffine';
+    } else if (transform === 'piecewiseaffine'){
+        // If it have only 3 points it is an affine transform.
+        if (points.length === 3*dims){
+            transform = 'affine';
+            console.warn('Only 3 source points given but "piecewiseAffine" transform selected. Transform changed to "affine".');
+        } else if (points.length < 3*dims){
+            throw(`A piecewise (or affine) transform needs to determine least three reference points but only ${points.length/dims} were given`);
+        }
+    } else if (transform === 'affine'){
+        if (points.length !== 3*dims){
+            throw(`An affine transform needs to determine exactly three reference points but ${points.length/dims} were given`)
+        }
+    }
+    return transform;
+}
+
 function applyTransformToPoint(matrix, x, y){
     return [(matrix[0] * x) + (matrix[2] * y) + matrix[4], //x
             (matrix[1] * x) + (matrix[3] * y) + matrix[5]] //y
@@ -302,4 +498,45 @@ function rectangleCircunscribingTriangle(triangle){
     const width = Math.max(triangle[0], triangle[2], triangle[4])-x;
     const height =  Math.max(triangle[1], triangle[3], triangle[5])-y;
     return {x : Math.floor(x), y : Math.floor(y), width : Math.ceil(width), height : Math.ceil(height)};
+}
+
+function containsValueGreaterThan(iterable, value){
+    for (let i=0; i<iterable.length; i++){
+        if (iterable[i] > value){
+            return true
+        }
+    }
+    return false
+}
+
+function minmaxXYofArray(array){
+    let maxX = -10000;
+    let maxY = -10000;
+    let minX = 10000;
+    let minY = 10000;
+    for (let i=0; i<array.length; i++){
+        const element = array[i];
+        if ((i%2) === 0){
+            if(element > maxX){
+                maxX = element;
+            } 
+            if(element < minX){
+                minX = element;
+            }
+        } else {
+            if(element > maxY){
+                maxY = element;
+            } 
+            if(element < minY){
+                minY = element;
+            }
+        }
+    }
+    return [minX, minY, maxX, maxY];
+}
+
+function denormalizePoints(points, width, height){
+    for (let i = 0; i < points.length; i++){
+        points[i] = (i%2) === 0? points[i]*width : points[i]*height;
+    }
 }
