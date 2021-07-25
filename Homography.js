@@ -2,7 +2,7 @@ const availableTransforms = ['auto', 'piecewiseaffine', 'affine'];
 const dims = 2;
 
 class Homography {
-    constructor(w=null, h=null, transform = 'piecewiseaffine'){
+    constructor(transform = 'piecewiseaffine', w=null, h=null){
         if (w !== null) w = Math.round(w);
         if (h !== null) h = Math.round(h);
         // Width and Height refers to the input image. If width and height are given it will be resized.
@@ -114,8 +114,8 @@ class Homography {
         if(last_width !== width || last_height !== height){
             width = Math.round(width);
             height = Math.round(height) 
-            this._hiddenCanvas.width = width;
-            this._hiddenCanvas.height = height; 
+            if (this._hiddenCanvas.width < width) {this._hiddenCanvas.width = width;}
+            if (this._hiddenCanvas.height < height) {this._hiddenCanvas.height = height;} 
             if(this._srcPoints !== null && this._srcPointsAreNormalized){
                 denormalizePoints(this._srcPoints, this._w, this._h);
                 this._srcPointsAreNormalized = false;
@@ -175,7 +175,8 @@ class Homography {
             this._objectiveW = Math.round(width);
             this._objectiveH = Math.round(height);
         }
-
+        if (this._hiddenCanvas.width < this._objectiveW) {this._hiddenCanvas.width = this._objectiveW;}
+        if (this._hiddenCanvas.height < this._objectiveH) {this._hiddenCanvas.height = this._objectiveH;} 
         // Transform the points to image coordinates if normalized coordinates were given
         if (this._isDstArrayNormalized){
             denormalizePoints(this._dstPoints, this._objectiveW, this._objectiveH);
@@ -217,6 +218,7 @@ class Homography {
             this._objectiveH = this._h;
         } else {
             [ , , this._objectiveW, this._objectiveH] = minmaxXYofArray(this._dstPoints);
+            
         }
     }
 
@@ -248,16 +250,15 @@ class Homography {
                 output_img = this._piecewiseAffineWarp(this._image)
         
         }
-         
+        output_img = new ImageData(output_img, this._objectiveW, this._objectiveH);
         return output_img;
     }
 
     _piecewiseAffineWarp(image){
         const triangleCorrespondenceMatrixWidth = this._maxSrcX-this._minSrcX;
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0.
-        let output_img = new Uint8ClampedArray(image.length); //Change to set as the image after debugging
+        let output_img = new Uint8ClampedArray(this._objectiveW*this._objectiveH*4); //Change to set as the image after debugging
         //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
-        
         for (let y = this._minSrcY; y < this._maxSrcY; y++){
             for (let x = this._minSrcX; x < this._maxSrcX; x++){
                 const inTriangle = this._trianglesCorrespondencesMatrix[(y-this._minSrcY)*triangleCorrespondenceMatrixWidth+(x-this._minSrcX)]
@@ -268,17 +269,23 @@ class Homography {
                     newX = Math.round(newX); newY = Math.round(newY);
                     //Get the index of y, x coordinate in the output image ArrayBuffer
                     const newIdx = newY*this._objectiveW*4+newX*4;
+                    
                     output_img[newIdx] = image[idx], output_img[newIdx+1] = image[idx+1],
                     output_img[newIdx+2] = image[idx+2], output_img[newIdx+3] = image[idx+3]; 
+                // TODO: ERASE IT AFTER DEBUGGING
+                } else {
+                    const newIdx = y*this._objectiveW*4+x*4;
+                    output_img[newIdx] = 255, output_img[newIdx+1] = 0,
+                    output_img[newIdx+2] = 0, output_img[newIdx+3] = 255; 
                 }
             }    
-        }
+        }    
         return output_img;
     }
      
     // TODO: Improve how the pads works here
     buildTrianglesCorrespondencesMatrix(method='circumscribed'){
-        // TODO: TIME SPENT IS HEREEE! Think about a better method
+        // TODO: TIME SPENT IS HEREEE! Think about a better method 
         this._trianglesCorrespondencesMatrix = new Int16Array((this._maxSrcX-this._minSrcX)*(this._maxSrcY - this._minSrcY)).fill(-1);
         switch(method){
             case 'floodFill':
@@ -309,25 +316,23 @@ class Homography {
             }
             asMatrix.push(row)
         }
-        console.table(asMatrix);
-        console.log(asMatrix);*/
+        console.table(asMatrix);*/
        return this._trianglesCorrespondencesMatrix;
     }
 
     _getImageAsRGBAArray(image){
-
         this._hiddenCanvasContext.clearRect(0, 0, this._w, this._h);
         this._hiddenCanvasContext.drawImage(image, 0, 0, this._w, this._h); //image.width, image.height);
         const imageRGBA = this._hiddenCanvasContext.getImageData(0, 0, this._w, this._h);
         return imageRGBA.data;
     }
     
-    async HTMLImageElementFromImageData(array, asPromise = true){// Obtain a blob: URL for the image data.
-        const imgData = new ImageData(array, this._w, this._h);
+    async HTMLImageElementFromImageData(imgData, asPromise = true){// Obtain a blob: URL for the image data.
         this._hiddenCanvasContext.clearRect(0, 0, this._w, this._h);
         this._hiddenCanvasContext.putImageData(imgData, 0, 0);
         let img = document.createElement('img')
         img.src = this._hiddenCanvas.toDataURL();
+        //document.body.append(img);
         if (asPromise){
             return new Promise((resolve, reject) => {
                 img.onload = () => resolve(img);
@@ -342,8 +347,8 @@ class Homography {
         const rectangle = rectangleCircunscribingTriangle(triangle);
         //Set the the width to manage the offset of the matrix
         const trianglesCorrespondencesMatrixWidth = this._maxSrcX-this._minSrcX;
-        for (let x = rectangle.x; x < rectangle.width; x++){
-            for (let y = rectangle.y; y < rectangle.height; y++){
+        for (let x = rectangle.x; x < rectangle.x+rectangle.width; x++){
+            for (let y = rectangle.y; y < rectangle.y+rectangle.height; y++){
                 if (pointInTriangle(x, y, triangle)){
                     this._trianglesCorrespondencesMatrix[(y-this._minSrcY) * trianglesCorrespondencesMatrixWidth + (x-this._minSrcX)] = idx;
                 }
@@ -532,7 +537,7 @@ function minmaxXYofArray(array){
             }
         }
     }
-    return [minX, minY, maxX, maxY];
+    return [Math.round(minX), Math.round(minY), Math.round(maxX), Math.round(maxY)];
 }
 
 function denormalizePoints(points, width, height){
