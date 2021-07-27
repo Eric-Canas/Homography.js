@@ -21,6 +21,11 @@ function runTests(){
     test7();
     test8();
     test9();
+
+    addTitle("Projective Transforms");
+    test10();
+    test11();
+    test12();
 }
 
 /**
@@ -182,7 +187,7 @@ function test6(){
     addSecondsToTitle((s1-s0)/1000)
     // Draw the src points again, as the translation should be virtually lost
     drawPointsInCanvas(squarePoints, canvasContext, 0);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h+50);
                         canvasContext.fill();
                         drawPointsInCanvas(squarePoints, canvasContext, w+padBetweenImgs);}))
 }
@@ -217,7 +222,7 @@ function test8(){
     // Affine
     const squarePoints = [[0, 0], [0, h], [w, 0]];
     const rectanglePoints = [[0, 0], [0, h*1.25], [w*1.75, 0]];    
-    let canvasContext = createCanvasContext("Resize Transform", w*2, h*2)
+    let canvasContext = createCanvasContext("Resize Transform", w*1.75, h*1.25)
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
@@ -235,7 +240,7 @@ function test8(){
     addSecondsToTitle((s1-s0)/1000)
     // Draw the src points again, as the translation should be virtually lost
     drawPointsInCanvas(squarePoints, canvasContext, 0);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w*1.75, h*1.25);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w*1.75, h*1.75);
                         canvasContext.fill();
                         drawPointsInCanvas(rectanglePoints, canvasContext, w+padBetweenImgs);}))
 }
@@ -244,7 +249,7 @@ function test9(){
     // Affine
     const squarePoints = [[0, 0], [0, h], [w, 0]];
     const rectanglePoints = [[0, 0], [w, h], [w, h/5]];      
-    let canvasContext = createCanvasContext("Perspective Transform", w*2, h+h/5)
+    let canvasContext = createCanvasContext("Complex Transform", w*2, h+h/5)
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
@@ -265,6 +270,78 @@ function test9(){
     img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w*2, h+h/5);
                         canvasContext.fill();
                         drawPointsInCanvas(rectanglePoints, canvasContext, w+padBetweenImgs);}))
+}
+
+function test10(){
+    const squarePoints = [[0, 0], [0, h], [w, 0], [w, h]];
+    let canvasContext = createCanvasContext("Identity Transform")
+    canvasContext.drawImage(testImg, 0, 0, w, h);
+    canvasContext.fill();
+    const s0 = performance.now();
+
+    const identityHomography = new Homography("projective", w, h);
+    // Sets the width - height from the very beginning, with non normalized coordinates
+    identityHomography.setSourcePoints(squarePoints);
+    // Don't set the image until the warping
+    identityHomography.setDstPoints(squarePoints);
+    const result = identityHomography.warp(testImg);
+    const img = identityHomography.HTMLImageElementFromImageData(result, false);
+    const s1 = performance.now();
+
+    addSecondsToTitle((s1-s0)/1000)
+    drawPointsInCanvas(squarePoints, canvasContext, 0);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+                        canvasContext.fill();
+                        drawPointsInCanvas(squarePoints, canvasContext, w+padBetweenImgs);}))
+}
+function test11(){
+    const perspectivePoints = [[0, 0], [0, h], [w, h*2/10], [w, h*8/10]];
+    const oppositePerspectivePoints = [[0, h*2/10], [0, h*8/10], [w, 0], [w, h]];
+    let canvasContext = createCanvasContext("Opposite Perspective Transform")
+    canvasContext.drawImage(testImg, 0, 0, w, h);
+    canvasContext.fill();
+    const s0 = performance.now();
+
+    const identityHomography = new Homography("projective", w, h);
+    // Sets the width - height from the very beginning, with non normalized coordinates
+    identityHomography.setSourcePoints(perspectivePoints);
+    // Don't set the image until the warping
+    identityHomography.setDstPoints(oppositePerspectivePoints);
+    const result = identityHomography.warp(testImg);
+    console.log(result);
+    const img = identityHomography.HTMLImageElementFromImageData(result, false);
+    const s1 = performance.now();
+
+    addSecondsToTitle((s1-s0)/1000)
+    drawPointsInCanvas(perspectivePoints, canvasContext, 0);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+                        canvasContext.fill();
+                        /*drawPointsInCanvas(oppositePerspectivePoints, canvasContext, w+padBetweenImgs);*/}))
+}
+
+function test12(){
+    const squarePoints = [[0, 0], [0, h], [w, 0], [w, h]];
+    const mirrorPoints = [[w-w/8, 0], [w-w/8, h], [0+w/8, 0], [0+w/8, h]];
+    let canvasContext = createCanvasContext("Mirror Transform + Width reshape")
+    canvasContext.drawImage(testImg, 0, 0, w, h);
+    canvasContext.fill();
+    const s0 = performance.now();
+
+    const identityHomography = new Homography("projective", w, h);
+    // Sets the width - height from the very beginning, with non normalized coordinates
+    identityHomography.setSourcePoints(squarePoints);
+    // Don't set the image until the warping
+    identityHomography.setDstPoints(mirrorPoints);
+    const result = identityHomography.warp(testImg);
+    console.log(result);
+    const img = identityHomography.HTMLImageElementFromImageData(result, false);
+    const s1 = performance.now();
+
+    addSecondsToTitle((s1-s0)/1000)
+    drawPointsInCanvas(squarePoints, canvasContext, 0);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+                        canvasContext.fill();
+                        drawPointsInCanvas(mirrorPoints, canvasContext, w+padBetweenImgs-w/8);}))
 }
 
 function createCanvasContext(title = "Test", width = null, height = null) {

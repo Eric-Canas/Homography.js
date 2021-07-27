@@ -30,7 +30,7 @@ class Homography {
         this._HTMLImage = null;
         this._image = null;
         this._trianglesCorrespondencesMatrix = null;
-        this._affineTransformMatrix = null;
+        this._transformMatrix = null;
 
     }
     /**
@@ -167,15 +167,15 @@ class Homography {
         this._dstPoints = points;
         this._isDstArrayNormalized = !containsValueGreaterThan(this._dstPoints, 1.0);
         // Transform matrix must exist for affine when calculating the output size
-        if (this.transform === 'affine'){
+        if (this.transform !== 'piecewiseaffine'){
             // Both source points and destiny points must be on the same range (normalized or not)
             if (this._isDstArrayNormalized === this._srcPointsAreNormalized){
-                this._affineTransformMatrix = affineMatrixFromTriangles(this._srcPoints, this._dstPoints);
+                this._transformMatrix = calculateTransformMatrix(this.transform, this._srcPoints, this._dstPoints);
             // Or at least, if source points are not normalized, destiny points should be denormalizable right now (if width and height were given).
             } else if (this._isDstArrayNormalized && width !== null && height !== null){
                 denormalizePoints(this._dstPoints, this._objectiveW, this._objectiveH);
                 this._isDstArrayNormalized = false;
-                this._affineTransformMatrix = affineMatrixFromTriangles(this._srcPoints, this._dstPoints);
+                this._transformMatrix = calculateTransformMatrix(this.transform, this._srcPoints, this._dstPoints);
             } else {
                 throw ("Destiny points are"+(this._isDstArrayNormalized? ' ' : ' not ') + "but source points are"+(this._srcPointsAreNormalized? ' ' : ' not '));
             }
@@ -234,8 +234,9 @@ class Homography {
         } else {
             if (this.transform === 'piecewiseaffine'){
                 [ , , this._objectiveW, this._objectiveH] = minmaxXYofArray(this._dstPoints);
-            } else if (this.transform === 'affine' && this._affineTransformMatrix !== null){
-                [this._xOutputOffset, this._yOutputOffset, this._objectiveW, this._objectiveH] = calculateTransformLimits(this._affineTransformMatrix, this._w, this._h);
+            } else if ((this.transform === 'affine' || this.transform === 'projective')  && this._transformMatrix !== null){
+                [this._xOutputOffset, this._yOutputOffset, this._objectiveW, this._objectiveH] = calculateTransformLimits(this._transformMatrix, this._w, this._h);
+                
             } else {
                 throw("Impossible to deduce width and height for the output");
             }
@@ -271,11 +272,13 @@ class Homography {
                 output_img = this._piecewiseAffineWarp(this._image);
                 break;
             case 'affine':
+            case 'projective':
                 if (this._objectiveW > this._w || this._objectiveH > this._h){
-                    output_img = this._inverseAffineWarp(this._image);
+                    output_img = this._inverseSimpleWarp(this._image);
                 } else {
-                    output_img = this._affineWarp(this._image);
+                    output_img = this._simpleWarp(this._image);
                 }
+                break;
         }
         output_img = new ImageData(output_img, this._objectiveW, this._objectiveH);
         return output_img;
@@ -292,7 +295,7 @@ class Homography {
                 if (inTriangle > -1){
                     //Get the index of y, x coordinate in the source image ArrayBuffer
                     const idx = y*this._w*4+x*4;
-                    let [newX, newY] = applyTransformToPoint(this.piecewiseMatrices[inTriangle], x, y);
+                    let [newX, newY] = applyAffineTransformToPoint(this.piecewiseMatrices[inTriangle], x, y);
                     newX = Math.round(newX); newY = Math.round(newY);
                     //Get the index of y, x coordinate in the output image ArrayBuffer
                     const newIdx = newY*this._objectiveW*4+newX*4;
@@ -310,7 +313,8 @@ class Homography {
         return output_img;
     }
 
-    _affineWarp(image){
+    _simpleWarp(image){
+        let transformPoint = getTransformFunction(this.transform);
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
         let output_img = new Uint8ClampedArray(this._objectiveW*this._objectiveH*4);
         //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
@@ -319,7 +323,7 @@ class Homography {
             for (let x = 0; x < this._w; x++){
                     //Get the index of y, x coordinate in the source image ArrayBuffer
                     const idx = y*this._w*4+x*4;
-                    let [newX, newY] = applyTransformToPoint(this._affineTransformMatrix, x, y);
+                    let [newX, newY] = transformPoint(this._transformMatrix, x, y);
                     newX = Math.round(newX-this._xOutputOffset); newY = Math.round(newY-this._yOutputOffset);
                     //Get the index of y, x coordinate in the output image ArrayBuffer
                     const newIdx = newY*this._objectiveW*4+newX*4;
@@ -330,16 +334,16 @@ class Homography {
         return output_img;
     }
 
-    _inverseAffineWarp(image){
+    _inverseSimpleWarp(image){
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
         let output_img = new Uint8ClampedArray(this._objectiveW*this._objectiveH*4);
         // Calculate it in the opposite direction
-        const inverseAffineMatrix = affineMatrixFromTriangles(this._dstPoints, this._srcPoints);
+        const inverseTransformMatrix = calculateTransformMatrix(this.transform, this._dstPoints, this._srcPoints);
+        let transformPoint = getTransformFunction(this.transform);
         // Track the full output image (going from _outputOffset to _objective+_outputOffset avoid white offsets)
-        console.log(this._xOutputOffset, this._yOutputOffset, this._objectiveW, this._objectiveH)
         for (let y = this._yOutputOffset; y < this._objectiveH+this._yOutputOffset; y++){
             for (let x = this._xOutputOffset; x < this._objectiveW+this._xOutputOffset; x++){
-                    let [srcX, srcY] = applyTransformToPoint(inverseAffineMatrix, x, y);
+                    let [srcX, srcY] = transformPoint(inverseTransformMatrix, x, y);
                     //If point is inside source image
                     if (srcX >= 0 && srcX < this._w && srcY >= 0 && srcY < this._h){
                         //Get the index in the destiny domain
@@ -356,6 +360,7 @@ class Homography {
         }    
         return output_img;
     }
+
      
     // TODO: Improve how the pads works here
     buildTrianglesCorrespondencesMatrix(method='circumscribed'){
@@ -474,6 +479,32 @@ function Delaunay(points){
     return triangles_idx;
 }
 
+function calculateTransformMatrix(transform, srcPoints, dstPoints){
+    let matrix;
+    switch(transform){
+        case 'affine':
+            matrix = affineMatrixFromTriangles(srcPoints, dstPoints);
+            break;
+        case 'projective':
+            matrix = projectiveMatrixFromSquares(srcPoints, dstPoints);
+            break;
+        default:
+            throw(`${transform} transform does not exist`);
+    }
+    return matrix;
+}
+
+function getTransformFunction(transform){
+    switch(transform){
+        case 'affine':
+            return applyAffineTransformToPoint;
+        case 'projective':
+            return applyProjectiveTransformToPoint;
+        default:
+            throw(`${transform} transform does not exist`);
+    }
+}
+
 function affineMatrixFromTriangles(srcTriangle, dstTriangle){
     /**
      * Gets the 2x3 transform matrix from two triangles got as TypedArray of positions (for performance reasons)
@@ -551,14 +582,27 @@ function inverseAffineMatrix(matrix){
 }
 
 function calculateTransformLimits(matrix, width, height){
-    const p0_0 = applyTransformToPoint(matrix, 0, 0);
-    const p1_0 = applyTransformToPoint(matrix, 0, height);
-    const p0_1 = applyTransformToPoint(matrix, width, 0);
-    const p1_1 = applyTransformToPoint(matrix, width, height);
-    const xOutputOffset = Math.min(p0_0[0], p1_0[0]);
-    const yOutputOffset = Math.min(p0_0[1], p0_1[1]);
-    const outWidth = Math.max(p0_1[0], p1_1[0]) - xOutputOffset;
-    const outHeight = Math.max(p1_0[1], p1_1[1]) - yOutputOffset;
+    let p0_0, p1_0, p0_1, p1_1;
+    // Affine Transform Case
+    if (matrix.length === 6){
+        p0_0 = applyAffineTransformToPoint(matrix, 0, 0);
+        p1_0 = applyAffineTransformToPoint(matrix, 0, height);
+        p0_1 = applyAffineTransformToPoint(matrix, width, 0);
+        p1_1 = applyAffineTransformToPoint(matrix, width, height);
+    // Projective Transform Case
+    } else if (matrix.length === 8){
+        p0_0 = applyProjectiveTransformToPoint(matrix, 0, 0);
+        p1_0 = applyProjectiveTransformToPoint(matrix, 0, height);
+        p0_1 = applyProjectiveTransformToPoint(matrix, width, 0);
+        p1_1 = applyProjectiveTransformToPoint(matrix, width, height);
+    } else {
+        throw(`Transform matrix have an incorrect shape --> ${matrix}`);
+    }
+    // It must check all the points in order to allow mirroring
+    const xOutputOffset = Math.min(p0_0[0], p1_0[0], p0_1[0], p1_1[0]);
+    const yOutputOffset = Math.min(p0_0[1], p0_1[1], p1_0[1], p1_1[1]);
+    const outWidth = Math.max(p0_1[0], p1_1[0], p0_0[0], p1_0[0]) - xOutputOffset;
+    const outHeight = Math.max(p1_0[1], p1_1[1], p0_0[1], p0_1[0]) - yOutputOffset;
     return [Math.round(xOutputOffset), Math.round(yOutputOffset), Math.round(outWidth), Math.round(outHeight)];
 
 }
@@ -567,28 +611,52 @@ function checkAndSelectTransform(transform, points){
     /**
      * Verifies that this.srcPoints is in accordance with the selected transform, or select one transform if 'auto' 
      */
-    if (transform === 'auto'){
-        if (points.length === 3*dims) transform = 'affine';
-        else if (points.length > 3*dims) transform = 'piecewiseaffine';
-    } else if (transform === 'piecewiseaffine'){
-        // If it have only 3 points it is an affine transform.
-        if (points.length === 3*dims){
-            transform = 'affine';
-            console.warn('Only 3 source points given but "piecewiseAffine" transform selected. Transform changed to "affine".');
-        } else if (points.length < 3*dims){
-            throw(`A piecewise (or affine) transform needs to determine least three reference points but only ${points.length/dims} were given`);
-        }
-    } else if (transform === 'affine'){
-        if (points.length !== 3*dims){
-            throw(`An affine transform needs to determine exactly three reference points but ${points.length/dims} were given`)
-        }
+
+    switch(transform){
+        case 'auto': 
+            if (points.length === 3*dims) transform = 'affine';
+            else if (points.length === 4*dims) transform = 'projective';
+            else if (points.length > 4*dims) transform = 'piecewiseaffine';
+            else throw(`Transforms must contain at least 3 points but only ${points.length/dims} were given`);
+            break;
+        
+        case 'piecewiseaffine':
+            // If it have only 3 points it is an affine transform.
+            if (points.length === 3*dims){
+                transform = 'affine';
+                console.warn('Only 3 source points given but "piecewiseAffine" transform selected. Transform changed to "affine".');
+            } else if (points.length < 3*dims){
+                throw(`A piecewise (or affine) transform needs to determine least three reference points but only ${points.length/dims} were given`);
+            }
+            // Correct
+            break;
+        case 'affine':
+            if (points.length !== 3*dims){
+                throw(`An affine transform needs to determine exactly three reference points but ${points.length/dims} were given`)
+            }
+            //Correct
+            break;
+        case 'projective':
+            if (points.length !== 4*dims){
+                throw(`A projective transform needs to determine exactly four reference points but ${points.length/dims} were given`)
+            }
+            //Correct
+            break;
+        default:
+            throw(`Transform "${transform}" is unknown`)
     }
     return transform;
 }
 
-function applyTransformToPoint(matrix, x, y){
+function applyAffineTransformToPoint(matrix, x, y){
     return [(matrix[0] * x) + (matrix[2] * y) + matrix[4], //x
             (matrix[1] * x) + (matrix[3] * y) + matrix[5]] //y
+}
+
+
+function applyProjectiveTransformToPoint(matrix, x, y){
+    return [(matrix[0]*x + matrix[1]*y + matrix[2]) / (matrix[6]*x + matrix[7]*y + 1),   //x
+            (matrix[3]*x + matrix[4]*y + matrix[5]) / (matrix[6]*x + matrix[7]*y + 1)]; //y
 }
 
 //This code is slightly adapted from (https://github.com/mattdesl/point-in-triangle [http://www.blackpawn.com/texts/pointinpoly/])
@@ -610,6 +678,32 @@ function pointInTriangle(x, y, triangle) {
         u = (dot11*dot02 - dot01*dot12) * inv,
         v = (dot00*dot12 - dot01*dot02) * inv
     return u>=0 && v>=0 && (u+v < 1)
+}
+
+function projectiveMatrixFromSquares(srcSquare, dstSquare){
+    /**
+     * Gets the 4x2 transform matrix from two squares, got as TypedArray of positions (for performance reasons)
+     */
+     const A = [[srcSquare[0], srcSquare[1], 1, 0, 0, 0, -dstSquare[0]*srcSquare[0], -dstSquare[0]*srcSquare[1]],
+                [0, 0, 0, srcSquare[0], srcSquare[1], 1, -dstSquare[1]*srcSquare[0], -dstSquare[1]*srcSquare[1]],
+                [srcSquare[2], srcSquare[3], 1, 0, 0, 0, -dstSquare[2]*srcSquare[2], -dstSquare[2]*srcSquare[3]],
+                [0, 0, 0, srcSquare[2], srcSquare[3], 1, -dstSquare[3]*srcSquare[2], -dstSquare[3]*srcSquare[3]],
+                [srcSquare[4], srcSquare[5], 1, 0, 0, 0, -dstSquare[4]*srcSquare[4], -dstSquare[4]*srcSquare[5]],
+                [0, 0, 0, srcSquare[4], srcSquare[5], 1, -dstSquare[5]*srcSquare[4], -dstSquare[5]*srcSquare[5]],
+                [srcSquare[6], srcSquare[7], 1, 0, 0, 0, -dstSquare[6]*srcSquare[6], -dstSquare[6]*srcSquare[7]],
+                [0, 0, 0, srcSquare[6], srcSquare[7], 1, -dstSquare[7]*srcSquare[6], -dstSquare[7]*srcSquare[7]]];
+     
+     const H = solve(A,dstSquare,true);
+
+     /*
+     for(let i=0; i<8; i+=2){
+        const [a, c] = applyProjectiveTransformToPoint(H, srcSquare[i], srcSquare[i+1], true)
+        console.log("From: "+srcSquare[i]+" to "+srcSquare[i+1]+". Expected to go: "+dstSquare[i]+", "+dstSquare[i+1]+ ". Went to: "+a+", "+c);
+     }
+     console.log(H);
+     */
+     return H;
+
 }
 
 function rectangleCircunscribingTriangle(triangle){
@@ -660,3 +754,110 @@ function denormalizePoints(points, width, height){
         points[i] = (i%2) === 0? points[i]*width : points[i]*height;
     }
 }
+
+
+  // --------------------- THIRD PARTY ----------------------------------
+
+  // --------------------- Numeric.js -----------------------------------
+  function clone(A,k,n) {
+    if(typeof k === "undefined") { k=0; }
+    if(typeof n === "undefined") { n = 1;}//numeric.sdim(A).length; }
+    var i,ret = Array(A.length);
+    if(k === n-1) {
+        for(i in A) { if(A.hasOwnProperty(i)) ret[i] = A[i]; }
+        return ret;
+    }
+    for(i in A) {
+        if(A.hasOwnProperty(i)) ret[i] = clone(A[i],k+1,n);
+    }
+    return ret;
+}
+function LUsolve(LUP, b) {
+    var i, j;
+    var LU = LUP.LU;
+    var n   = LU.length;
+    var x = clone(b);
+    var P   = LUP.P;
+    var Pi, LUi, LUii, tmp;
+  
+    for (i=n-1;i!==-1;--i) x[i] = b[i];
+    for (i = 0; i < n; ++i) {
+      Pi = P[i];
+      if (P[i] !== i) {
+        tmp = x[i];
+        x[i] = x[Pi];
+        x[Pi] = tmp;
+      }
+  
+      LUi = LU[i];
+      for (j = 0; j < i; ++j) {
+        x[i] -= x[j] * LUi[j];
+      }
+    }
+  
+    for (i = n - 1; i >= 0; --i) {
+      LUi = LU[i];
+      for (j = i + 1; j < n; ++j) {
+        x[i] -= x[j] * LUi[j];
+      }
+  
+      x[i] /= LUi[i];
+    }
+  
+    return x;
+  }
+
+  function LU(A, fast) {
+    fast = fast || false;
+  
+    var abs = Math.abs;
+    var i, j, k, absAjk, Akk, Ak, Pk, Ai;
+    var max;
+    var n = A.length, n1 = n-1;
+    var P = new Array(n);
+    if(!fast) A = clone(A);
+  
+    for (k = 0; k < n; ++k) {
+      Pk = k;
+      Ak = A[k];
+      max = abs(Ak[k]);
+      for (j = k + 1; j < n; ++j) {
+        absAjk = abs(A[j][k]);
+        if (max < absAjk) {
+          max = absAjk;
+          Pk = j;
+        }
+      }
+      P[k] = Pk;
+  
+      if (Pk != k) {
+        A[k] = A[Pk];
+        A[Pk] = Ak;
+        Ak = A[k];
+      }
+  
+      Akk = Ak[k];
+  
+      for (i = k + 1; i < n; ++i) {
+        A[i][k] /= Akk;
+      }
+  
+      for (i = k + 1; i < n; ++i) {
+        Ai = A[i];
+        for (j = k + 1; j < n1; ++j) {
+          Ai[j] -= Ai[k] * Ak[j];
+          ++j;
+          Ai[j] -= Ai[k] * Ak[j];
+        }
+        if(j===n1) Ai[j] -= Ai[k] * Ak[j];
+      }
+    }
+  
+    return {
+      LU: A,
+      P:  P
+    };
+  }
+
+function solve(A,b,fast) { return LUsolve(LU(A,fast), b); }
+ 
