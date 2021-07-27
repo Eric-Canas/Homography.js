@@ -30,6 +30,7 @@ class Homography {
         this._HTMLImage = null;
         this._image = null;
         this._trianglesCorrespondencesMatrix = null;
+        this._affineTransformMatrix = null;
 
     }
     /**
@@ -165,9 +166,23 @@ class Homography {
 
         this._dstPoints = points;
         this._isDstArrayNormalized = !containsValueGreaterThan(this._dstPoints, 1.0);
-        
+        // Transform matrix must exist for affine when calculating the output size
+        if (this.transform === 'affine'){
+            // Both source points and destiny points must be on the same range (normalized or not)
+            if (this._isDstArrayNormalized === this._srcPointsAreNormalized){
+                this._affineTransformMatrix = affineMatrixFromTriangles(this._srcPoints, this._dstPoints);
+            // Or at least, if source points are not normalized, destiny points should be denormalizable right now (if width and height were given).
+            } else if (this._isDstArrayNormalized && width !== null && height !== null){
+                denormalizePoints(this._dstPoints, this._objectiveW, this._objectiveH);
+                this._isDstArrayNormalized = false;
+                this._affineTransformMatrix = affineMatrixFromTriangles(this._srcPoints, this._dstPoints);
+            } else {
+                throw ("Destiny points are"+(this._isDstArrayNormalized? ' ' : ' not ') + "but source points are"+(this._srcPointsAreNormalized? ' ' : ' not '));
+            }
+        }
+
         // Induce the width and height if not given. 
-        if ((width === null || height === null)){
+        if ((width === null || height === null || this.transform !== 'piecewiseaffine')){
             // Improve this function
             this.induceBestObjectiveWidthAndHeight();
         // Or set them if given
@@ -211,13 +226,19 @@ class Homography {
         // TODO: Do it when this._w, and this._h are not setted
         // Or check for which would be the minimum and the maximum point of the transformed image
         if (this._isDstArrayNormalized){
+            // It will be denormalized right when ending this function
             console.warn("Array of destiny points is normalized, but width and height parameters are not given. "+
-                         "Width and Height of the source will be used but it could be undesired in some cases.");
-            
+                         "Width and Height of the source will be used but it could be undesired in some cases.");            
             this._objectiveW = this._w;
             this._objectiveH = this._h;
         } else {
-            [ , , this._objectiveW, this._objectiveH] = minmaxXYofArray(this._dstPoints);
+            if (this.transform === 'piecewiseaffine'){
+                [ , , this._objectiveW, this._objectiveH] = minmaxXYofArray(this._dstPoints);
+            } else if (this.transform === 'affine' && this._affineTransformMatrix !== null){
+                [this._xOutputOffset, this._yOutputOffset, this._objectiveW, this._objectiveH] = calculateTransformLimits(this._affineTransformMatrix, this._w, this._h);
+            } else {
+                throw("Impossible to deduce width and height for the output");
+            }
             
         }
     }
@@ -247,8 +268,14 @@ class Homography {
         let output_img;
         switch(this.transform){
             case 'piecewiseaffine':
-                output_img = this._piecewiseAffineWarp(this._image)
-        
+                output_img = this._piecewiseAffineWarp(this._image);
+                break;
+            case 'affine':
+                if (this._objectiveW > this._w || this._objectiveH > this._h){
+                    output_img = this._inverseAffineWarp(this._image);
+                } else {
+                    output_img = this._affineWarp(this._image);
+                }
         }
         output_img = new ImageData(output_img, this._objectiveW, this._objectiveH);
         return output_img;
@@ -256,8 +283,8 @@ class Homography {
 
     _piecewiseAffineWarp(image){
         const triangleCorrespondenceMatrixWidth = this._maxSrcX-this._minSrcX;
-        // output_img starts as a fully transparent image (the whole alpha channel is filled with 0.
-        let output_img = new Uint8ClampedArray(this._objectiveW*this._objectiveH*4); //Change to set as the image after debugging
+        // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
+        let output_img = new Uint8ClampedArray(this._objectiveW*this._objectiveH*4);
         //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
         for (let y = this._minSrcY; y < this._maxSrcY; y++){
             for (let x = this._minSrcX; x < this._maxSrcX; x++){
@@ -278,6 +305,53 @@ class Homography {
                     output_img[newIdx] = 255, output_img[newIdx+1] = 0,
                     output_img[newIdx+2] = 0, output_img[newIdx+3] = 255; 
                 }
+            }    
+        }    
+        return output_img;
+    }
+
+    _affineWarp(image){
+        // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
+        let output_img = new Uint8ClampedArray(this._objectiveW*this._objectiveH*4);
+        //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
+
+        for (let y = 0; y < this._h; y++){
+            for (let x = 0; x < this._w; x++){
+                    //Get the index of y, x coordinate in the source image ArrayBuffer
+                    const idx = y*this._w*4+x*4;
+                    let [newX, newY] = applyTransformToPoint(this._affineTransformMatrix, x, y);
+                    newX = Math.round(newX-this._xOutputOffset); newY = Math.round(newY-this._yOutputOffset);
+                    //Get the index of y, x coordinate in the output image ArrayBuffer
+                    const newIdx = newY*this._objectiveW*4+newX*4;
+                    output_img[newIdx] = image[idx], output_img[newIdx+1] = image[idx+1],
+                    output_img[newIdx+2] = image[idx+2], output_img[newIdx+3] = image[idx+3];
+            }    
+        }    
+        return output_img;
+    }
+
+    _inverseAffineWarp(image){
+        // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
+        let output_img = new Uint8ClampedArray(this._objectiveW*this._objectiveH*4);
+        // Calculate it in the opposite direction
+        const inverseAffineMatrix = affineMatrixFromTriangles(this._dstPoints, this._srcPoints);
+        // Track the full output image (going from _outputOffset to _objective+_outputOffset avoid white offsets)
+        console.log(this._xOutputOffset, this._yOutputOffset, this._objectiveW, this._objectiveH)
+        for (let y = this._yOutputOffset; y < this._objectiveH+this._yOutputOffset; y++){
+            for (let x = this._xOutputOffset; x < this._objectiveW+this._xOutputOffset; x++){
+                    let [srcX, srcY] = applyTransformToPoint(inverseAffineMatrix, x, y);
+                    //If point is inside source image
+                    if (srcX >= 0 && srcX < this._w && srcY >= 0 && srcY < this._h){
+                        //Get the index in the destiny domain
+                        const idx = (y-this._yOutputOffset)*this._objectiveW*4+(x-this._xOutputOffset)*4;
+                        //Get the index in the source domain
+                        srcX = Math.round(srcX); srcY = Math.round(srcY);
+                        //Get the index of y, x coordinate in the output image ArrayBuffer
+                        const srcIdx = srcY*this._w*4+srcX*4;
+                        output_img[idx] = image[srcIdx], output_img[idx+1] = image[srcIdx+1],
+                        output_img[idx+2] = image[srcIdx+2], output_img[idx+3] = image[srcIdx+3];
+                    }
+                    // Anything outside it is kept as transparent background
             }    
         }    
         return output_img;
@@ -445,6 +519,47 @@ function affineMatrixFromTriangles(srcTriangle, dstTriangle){
         ]);
         // Some codes rounds it to a maximum decimal for smoothing reasons
         return affineMatrix
+
+}
+
+function inverseAffineMatrix(matrix){
+    /**
+     * Gets the 2x3 transform matrix from two triangles got as TypedArray of positions (for performance reasons)
+     */
+        
+        // Set the [[a, b, c], [d, e, f]] points of the matrix but as variables, for avoiding memory allocations until the last moment
+        // Src matrix (that will be inversed later)
+        const srcA = matrix[0];
+        const srcB = matrix[1];
+        const srcC = matrix[2];
+        const srcD = matrix[3];
+        const srcE = matrix[4];
+        const srcF = matrix[5];
+        let invMatrix = new Float32Array(6)
+        //Inverse the source matrix
+        const denominator = srcA * srcD - srcB * srcC;
+        
+        invMatrix[0] = srcD / denominator;
+        invMatrix[1] = srcB / -denominator;
+        invMatrix[2] = srcC / -denominator;
+        invMatrix[3] = srcA / denominator;
+        invMatrix[4] = (srcD * srcE - srcC * srcF) / -denominator;
+        invMatrix[5] = (srcB * srcE - srcA * srcF) / denominator;
+
+        return invMatrix;
+
+}
+
+function calculateTransformLimits(matrix, width, height){
+    const p0_0 = applyTransformToPoint(matrix, 0, 0);
+    const p1_0 = applyTransformToPoint(matrix, 0, height);
+    const p0_1 = applyTransformToPoint(matrix, width, 0);
+    const p1_1 = applyTransformToPoint(matrix, width, height);
+    const xOutputOffset = Math.min(p0_0[0], p1_0[0]);
+    const yOutputOffset = Math.min(p0_0[1], p0_1[1]);
+    const outWidth = Math.max(p0_1[0], p1_1[0]) - xOutputOffset;
+    const outHeight = Math.max(p1_0[1], p1_1[1]) - yOutputOffset;
+    return [Math.round(xOutputOffset), Math.round(yOutputOffset), Math.round(outWidth), Math.round(outHeight)];
 
 }
 
