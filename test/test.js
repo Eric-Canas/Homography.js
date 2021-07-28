@@ -32,13 +32,13 @@ function runTests(){
  * 
  */
 function test1(){
-    const squarePoints = [[0, 0], [0, h], [w, 0], [w, h]];
+    const squarePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
     let canvasContext = createCanvasContext("Identity Transform")
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
 
-    const identityHomography = new Homography("piecewiseaffine", w, h);
+    const identityHomography = new Homography("piecewiseaffine");
     // Sets the width - height from the very beginning, with non normalized coordinates
     identityHomography.setSourcePoints(squarePoints);
     // Don't set the image until the warping
@@ -48,15 +48,16 @@ function test1(){
     const s1 = performance.now();
 
     addSecondsToTitle((s1-s0)/1000)
-    drawPointsInCanvas(squarePoints, canvasContext, 0, identityHomography._triangles);
+    drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0, identityHomography._triangles);
     img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
                         canvasContext.fill();
-                        drawPointsInCanvas(squarePoints, canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
+                        drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
 }
 
 function test2(){
-    const squarePoints = [[0, 0], [0, h], [w, 0], [w, h]];
-    const dstPoints = [[w/5, h/5], [0, h/2], [w, 0], [w*6/8, h*6/8]];
+    // Points are given normalized
+    const squarePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
+    const dstPoints = [[1/5, 1/5], [0, 1/2], [1, 0], [1*6/8, 1*6/8]];
     let canvasContext = createCanvasContext("Transforming both triangles of the square")
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
@@ -64,36 +65,38 @@ function test2(){
     // Don't set the width and height from the beginning
     const identityHomography = new Homography("piecewiseaffine");
     // But sets it when source points
-    identityHomography.setSourcePoints(squarePoints, null, w, h);
+    identityHomography.setSourcePoints(squarePoints, null);
     // Don't set any objective width
     identityHomography.setDstPoints(dstPoints);
-    // Sets the image jst before the warping
     identityHomography.setImage(testImg);
+    // Sets the image jst before the warping
     // Call the warping without any image
     const result = identityHomography.warp();
+    console.log(result)
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
     addSecondsToTitle((s1-s0)/1000)
-    drawPointsInCanvas(squarePoints, canvasContext, 0, identityHomography._triangles);
+
+    drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0, identityHomography._triangles);
     img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
                         canvasContext.fill();
-                        drawPointsInCanvas(dstPoints, canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
+                        drawPointsInCanvas(denormalizePoints(dstPoints, w, h), canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
 }
 
 
 function test3(){
-    
+    //Source points are not normalized
     const squarePoints = [[0, 0], [0, h], [w, 0], [w, h]];
-    const dstPoints = [[0, 0], [0, h/2], [w/2, 0], [w/6, h/12]];
+    //But destiny points are
+    const dstPoints = [[0, 0], [0, 1/2], [1/2, 0], [1/6, 1/12]];
     let canvasContext = createCanvasContext("Resize through dstPoints + Overlapping")
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
     // Don't set the width and height at any moment
-    const identityHomography = new Homography("piecewiseaffine", w, h);
-    // And sets the image togheter with
+    const identityHomography = new Homography("piecewiseaffine");
+    // And sets the image from the source points
     identityHomography.setSourcePoints(squarePoints, testImg);
-    // Don't set any width or height in any moment
     identityHomography.setDstPoints(dstPoints);
     // Call the warping without any image
     const result = identityHomography.warp();
@@ -103,7 +106,7 @@ function test3(){
     drawPointsInCanvas(squarePoints, canvasContext, 0, identityHomography._triangles);
     img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
                         canvasContext.fill();
-                        drawPointsInCanvas(dstPoints, canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
+                        drawPointsInCanvas(denormalizePoints(dstPoints, w, h), canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
 }
 
 function test4(){
@@ -115,11 +118,11 @@ function test4(){
     canvasContext.drawImage(testImg, 0, 0, newW, newH);
     canvasContext.fill();
     const s0 = performance.now();
-    // Set the width and height from the beginning
+    // Set the width and height from the beginning. This way, image is resized on origin, and newH corresponds to the vertex.
     const identityHomography = new Homography("piecewiseaffine", newW, newH);
     identityHomography.setSourcePoints(rectanglePoints);
     identityHomography.setImage(testImg)
-    identityHomography.setDstPoints(dstPoints, newW, newH);
+    identityHomography.setDstPoints(dstPoints);
     const result = identityHomography.warp();
     
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
@@ -180,7 +183,6 @@ function test6(){
     // Don't set the image until the warping
     identityHomography.setDstPoints(displacedPoints);
     const result = identityHomography.warp(testImg);
-    console.log(result);
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
 
@@ -194,73 +196,81 @@ function test6(){
 
 
 function test7(){
-    const squarePoints = [[0, 0], [0, h], [w, 0]];
-    const rotatedPoints = [[0, h/2], [w/2, h], [w/2, 0]];
+    // Use normalized points
+    const squarePoints = [[0, 0], [0, 1], [1, 0]];
+    const rotatedPoints = [[0, 1/2], [1/2, 1], [1/2, 0]];
     let canvasContext = createCanvasContext("45 Degrees Rotation")
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
 
-    const identityHomography = new Homography("affine", w, h);
+    const identityHomography = new Homography("affine");
     // Sets the width - height from the very beginning, with non normalized coordinates
-    identityHomography.setSourcePoints(squarePoints);
+    identityHomography.setSourcePoints(squarePoints, null);
     // Don't set the image until the warping
     identityHomography.setDstPoints(rotatedPoints);
     const result = identityHomography.warp(testImg);
-    console.log(result)
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
 
     addSecondsToTitle((s1-s0)/1000)
-    drawPointsInCanvas(squarePoints, canvasContext, 0);
+    drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0);
     img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
                         canvasContext.fill();
-                        drawPointsInCanvas(rotatedPoints, canvasContext, w+padBetweenImgs);}))
+                        drawPointsInCanvas(denormalizePoints(rotatedPoints, w, h), canvasContext, w+padBetweenImgs);}))
 }
 
 function test8(){
     // Affine
-    const squarePoints = [[0, 0], [0, h], [w, 0]];
-    const rectanglePoints = [[0, 0], [0, h*1.25], [w*1.75, 0]];    
-    let canvasContext = createCanvasContext("Resize Transform", w*1.75, h*1.25)
+    const squarePoints = [[0, 0], [0, 1], [1, 0]];
+    const shorterRectangle = [[0, 0], [0, 1/1.25], [1/1.75, 0]];  
+    const rectanglePoints = [[0, 0], [0, 1*1.25], [1*1.75, 0]];    
+    let canvasContext = createCanvasContext("Resize Transform with 10 intermediate (discarded) transforms", w*1.75, h*1.25)
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
 
-    const identityHomography = new Homography("affine", w, h);
-    // Sets the width - height from the very beginning, with non normalized coordinates
+    // Never set the height and width
+    const identityHomography = new Homography("affine");
     identityHomography.setSourcePoints(squarePoints);
-    // Don't set the image until the warping
-    identityHomography.setDstPoints(rectanglePoints);
-    const result = identityHomography.warp(testImg);
-    console.log(result)
+    let result;
+    // Do multiple transformations before for ensuring that consistency is kept
+    for (let i = 0; i < 10; i++){
+        // Transform first with a shorter rectangle
+        identityHomography.setDstPoints(shorterRectangle);
+        const result_to_discard = identityHomography.warp(testImg);
+        // Transform then with the second large rectangle
+        identityHomography.setDstPoints(rectanglePoints);
+        result = identityHomography.warp(testImg);
+        
+    }
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
 
     addSecondsToTitle((s1-s0)/1000)
     // Draw the src points again, as the translation should be virtually lost
-    drawPointsInCanvas(squarePoints, canvasContext, 0);
+    drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0);
     img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w*1.75, h*1.75);
                         canvasContext.fill();
-                        drawPointsInCanvas(rectanglePoints, canvasContext, w+padBetweenImgs);}))
+                        drawPointsInCanvas(denormalizePoints(rectanglePoints, w, h), canvasContext, w+padBetweenImgs);}))
 }
 
 function test9(){
-    // Affine
-    const squarePoints = [[0, 0], [0, h], [w, 0]];
+    // One in image coordinates and the other normalized
+    const squarePoints = [[0, 0], [0, 1], [1, 0]];
     const rectanglePoints = [[0, 0], [w, h], [w, h/5]];      
     let canvasContext = createCanvasContext("Complex Transform", w*2, h+h/5)
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
 
-    const identityHomography = new Homography("affine", w, h);
+    const identityHomography = new Homography("affine");
     // Sets the width - height from the very beginning, with non normalized coordinates
     identityHomography.setSourcePoints(squarePoints);
+    identityHomography.setImage(testImg);
     // Don't set the image until the warping
     identityHomography.setDstPoints(rectanglePoints);
-    const result = identityHomography.warp(testImg);
-    console.log(result)
+    const result = identityHomography.warp();
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
 
@@ -308,7 +318,6 @@ function test11(){
     // Don't set the image until the warping
     identityHomography.setDstPoints(oppositePerspectivePoints);
     const result = identityHomography.warp(testImg);
-    console.log(result);
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
 
@@ -320,28 +329,27 @@ function test11(){
 }
 
 function test12(){
-    const squarePoints = [[0, 0], [0, h], [w, 0], [w, h]];
-    const mirrorPoints = [[w-w/8, 0], [w-w/8, h], [0+w/8, 0], [0+w/8, h]];
+    const squarePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
+    const mirrorPoints = [[1-1/8, 0], [1-1/8, 1], [0+1/8, 0], [0+1/8, 1]];
     let canvasContext = createCanvasContext("Mirror Transform + Width reshape")
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
 
-    const identityHomography = new Homography("projective", w, h);
+    const identityHomography = new Homography("projective");
     // Sets the width - height from the very beginning, with non normalized coordinates
-    identityHomography.setSourcePoints(squarePoints);
+    identityHomography.setSourcePoints(squarePoints, null, w/1.5, h/1.5);
     // Don't set the image until the warping
     identityHomography.setDstPoints(mirrorPoints);
     const result = identityHomography.warp(testImg);
-    console.log(result);
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
 
     addSecondsToTitle((s1-s0)/1000)
-    drawPointsInCanvas(squarePoints, canvasContext, 0);
+    drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0);
     img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
                         canvasContext.fill();
-                        drawPointsInCanvas(mirrorPoints, canvasContext, w+padBetweenImgs-w/8);}))
+                        drawPointsInCanvas(denormalizePoints(mirrorPoints, w, h), canvasContext, w+padBetweenImgs-w/8);}))
 }
 
 function createCanvasContext(title = "Test", width = null, height = null) {
@@ -403,4 +411,13 @@ function drawSegment(context, [ax, ay], [bx, by], xOffset = 0, color='green', li
     context.stroke();
 }
 
+function denormalizePoints(points, width = null, height = null){
+    width = width === null? w : width;
+    height = height === null? h : height;
+    let normalizedPoints = [];
+    for (let i = 0; i < points.length; i++){
+        normalizedPoints.push([points[i][0] * width, points[i][1] * height]);
+    }
+    return normalizedPoints;
+}
 
