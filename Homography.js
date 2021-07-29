@@ -1,4 +1,9 @@
 const availableTransforms = ['auto', 'piecewiseaffine', 'affine', 'projective'];
+
+/**
+ * @typedef {"auto"|"affine"|"piecewiseaffine"|"projective"} Transform
+*/
+
 const dims = 2;
 // Max allowed width/height in normalized coordinates (just for allowing resizes up to x8)
 const normalizedMax = 8.0;
@@ -7,12 +12,51 @@ const normalizedMax = 8.0;
 
 
 class Homography {
-    constructor(transform = 'piecewiseaffine', w=null, h=null){
-        if (w !== null) w = Math.round(w);
-        if (h !== null) h = Math.round(h);
+    /**
+     * Summary.           Class for performing geometrical transformations over images.
+     * 
+     * Description.       Homography is in charge of performing: Affine, Projective or PiecewiseAffine transformations over images,
+     *                    in a way that is as transparent and simple to the user as possible. It is lightweight and specially intended
+     *                    for real-time applications. For this purpose, this class keeps an internal state for avoiding redundant operations
+     *                    when reused, therefore, critical performance comes when multiple transformations are done over the same image.
+     * 
+     * @constructs        Homography
+     * @link              https://github.com/Eric-Canas/Homography.js
+     *  
+     * @param {Transform} [transform = auto]    String representing the transformation to be done. One of "auto", "affine", "piecewiseaffine" or "projective":
+     *                                            · "auto" : Transformation will be automatically selected depending on the inputs given. Just take "auto" if you
+     *                                                       don't know which kind of transform do you need. This is the default value.
+     * 
+     *                                            · "affine" : A geometrical transformation that ensures that all parallel lines of the input image will be parallel
+     *                                                         in the output image. It will need exactly three source points to be set (and three destiny points). 
+     *                                                         An affine transformation can only be composed by rotations, scales, shearings and reflections.
+     * 
+     *                                            · "piecewiseaffine" : A composition of several affine transforms that allows more complex constructions. This transforms
+     *                                                                  generates a mesh of triangles with the source points and finds an independent affine transformation
+     *                                                                  for each one of them. This way, it allows more complex transformation as, for example, sinusoidal forms.
+     *                                                                  It can take any amount (greater than three) of reference points. When "piecewiseaffine" mode is selected,
+     *                                                                  only the parts of the input image within a triangle will appear on the output image. If you want to ensure
+     *                                                                  that the whole image appears in the output, ensure to set include reference point on each corner of the image.
+     *  
+     *                                             · "projective" : A transformation that shows how the an image change when the point of view of the observer is modified. 
+     *                                                              It takes exactly four source points (and four destiny points). This is the transformation that should
+     *                                                              be used when looking for perspective modifications.
+     * 
+     * @param {Number} [width = null]           Optional width of the input image. If given, it will resize the input image to that width. Lower widths will imply faster
+     *                                          transformations at the cost of lower resolution in the output image, while larger widths will produce higher resolution images
+     *                                          at the cost of processing time. If null, it will use the original image width.
+     * 
+     * @param {Number} [height = null]          Optional height of the input image. If given, it will resize the input image to that height. Lower heights will imply faster
+     *                                          transformations at the cost of lower resolution in the output image, while larger heights will produce higher resolution images
+     *                                          at the cost of processing time. If null, it will use the original image height.
+     *   
+     */
+    constructor(transform = 'auto', width=null, height=null){
+        if (width !== null) width = Math.round(width);
+        if (height !== null) height = Math.round(height);
         // Width and Height refers to the input image. If width and height are given it will be resized.
-        this._w = w;
-        this._h = h;
+        this._w = width;
+        this._h = height;
         this._objectiveW = null;
         this._objectiveH = null;
         this._srcPointsAreNormalized = true;
@@ -23,8 +67,8 @@ class Homography {
         this.firstTransformSelected = transform.toLowerCase();
         this.transform = transform.toLowerCase();
         this._hiddenCanvas = document.createElement('canvas');
-        this._hiddenCanvas.width = w;
-        this._hiddenCanvas.height = h;
+        this._hiddenCanvas.width = width;
+        this._hiddenCanvas.height = height;
         this._hiddenCanvas.style.display = 'hidden';
         this._hiddenCanvasContext = this._hiddenCanvas.getContext("2d");
         this._srcPoints = null;
