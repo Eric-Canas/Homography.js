@@ -23,290 +23,419 @@ class Homography {
      * @constructs        Homography
      * @link              https://github.com/Eric-Canas/Homography.js
      *  
-     * @param {Transform} [transform = auto]    String representing the transformation to be done. One of "auto", "affine", "piecewiseaffine" or "projective":
-     *                                            · "auto" : Transformation will be automatically selected depending on the inputs given. Just take "auto" if you
-     *                                                       don't know which kind of transform do you need. This is the default value.
+     * @param {Transform} [transform = "auto"]  String representing the transformation to be done. One of "auto", "affine", "piecewiseaffine" or "projective":
+     *                                           · "auto" : Transformation will be automatically selected depending on the inputs given. Just take "auto" if you
+     *                                                      don't know which kind of transform do you need. This is the default value.
      * 
-     *                                            · "affine" : A geometrical transformation that ensures that all parallel lines of the input image will be parallel
-     *                                                         in the output image. It will need exactly three source points to be set (and three destiny points). 
-     *                                                         An affine transformation can only be composed by rotations, scales, shearings and reflections.
+     *                                           · "affine" : A geometrical transformation that ensures that all parallel lines of the input image will be parallel
+     *                                                        in the output image. It will need exactly three source points to be set (and three destiny points). 
+     *                                                        An affine transformation can only be composed by rotations, scales, shearings and reflections.
      * 
-     *                                            · "piecewiseaffine" : A composition of several affine transforms that allows more complex constructions. This transforms
-     *                                                                  generates a mesh of triangles with the source points and finds an independent affine transformation
-     *                                                                  for each one of them. This way, it allows more complex transformation as, for example, sinusoidal forms.
-     *                                                                  It can take any amount (greater than three) of reference points. When "piecewiseaffine" mode is selected,
-     *                                                                  only the parts of the input image within a triangle will appear on the output image. If you want to ensure
-     *                                                                  that the whole image appears in the output, ensure to set include reference point on each corner of the image.
+     *                                           · "piecewiseaffine" : A composition of several affine transforms that allows more complex constructions. This transforms
+     *                                                                 generates a mesh of triangles with the source points and finds an independent affine transformation
+     *                                                                 for each one of them. This way, it allows more complex transformation as, for example, sinusoidal forms.
+     *                                                                 It can take any amount (greater than three) of reference points. When "piecewiseaffine" mode is selected,
+     *                                                                 only the parts of the input image within a triangle will appear on the output image. If you want to ensure
+     *                                                                 that the whole image appears in the output, ensure to set include reference point on each corner of the image.
      *  
-     *                                             · "projective" : A transformation that shows how the an image change when the point of view of the observer is modified. 
-     *                                                              It takes exactly four source points (and four destiny points). This is the transformation that should
-     *                                                              be used when looking for perspective modifications.
+     *                                            · "projective" : A transformation that shows how the an image change when the point of view of the observer is modified. 
+     *                                                             It takes exactly four source points (and four destiny points). This is the transformation that should
+     *                                                             be used when looking for perspective modifications.
      * 
-     * @param {Number} [width = null]           Optional width of the input image. If given, it will resize the input image to that width. Lower widths will imply faster
+     * @param {Number}              [width]     Optional width of the input image. If given, it will resize the input image to that width. Lower widths will imply faster
      *                                          transformations at the cost of lower resolution in the output image, while larger widths will produce higher resolution images
      *                                          at the cost of processing time. If null, it will use the original image width.
      * 
-     * @param {Number} [height = null]          Optional height of the input image. If given, it will resize the input image to that height. Lower heights will imply faster
+     * @param {Number}             [height]     Optional height of the input image. If given, it will resize the input image to that height. Lower heights will imply faster
      *                                          transformations at the cost of lower resolution in the output image, while larger heights will produce higher resolution images
      *                                          at the cost of processing time. If null, it will use the original image height.
      *   
      */
     constructor(transform = 'auto', width=null, height=null){
+        // Width and Height refers to the input image. If width and height are given it will be resized.
         if (width !== null) width = Math.round(width);
         if (height !== null) height = Math.round(height);
-        // Width and Height refers to the input image. If width and height are given it will be resized.
-        this._w = width;
-        this._h = height;
-        this._objectiveW = null;
-        this._objectiveH = null;
-        this._srcPointsAreNormalized = true;
-        this._maxSrcX = null;
-        this._maxSrcY = null;
-        this._minSrcX = null;
-        this._minSrcY = null;
+        // Sets the source width and height
+        this._width = width;
+        this._height = height;
+        // Sets the objective width and height to null since it is unkwnown until source and destiny points are set
+        this._objectiveWidth = null;
+        this._objectiveHeight = null;
+        // Set the source and destiny points to null
+        this._srcPoints = null;
+        this._dstPoints = null;
+        // Set the selected transform
         this.firstTransformSelected = transform.toLowerCase();
         this.transform = transform.toLowerCase();
+        // Build the hidden canvas that will help to convert HTMLImageElements to flat Uint8 Arrays
         this._hiddenCanvas = document.createElement('canvas');
         this._hiddenCanvas.width = width;
         this._hiddenCanvas.height = height;
         this._hiddenCanvas.style.display = 'hidden';
         this._hiddenCanvasContext = this._hiddenCanvas.getContext("2d");
-        this._srcPoints = null;
-        this._dstPoints = null;
-        // Used to avoid new memory allocation
-        this._auxSrcTriangle = new Float32Array(3*dims);
-        this._auxDstTriangle = new Float32Array(3*dims);
+        // Sets the internal variables for the current image to null
         this._HTMLImage = null;
         this._image = null;
+        // Set the auxiliar variables that are used in piecewiseAffine transforms for minimizing the computation performed
+        this._maxSrcX = null;
+        this._maxSrcY = null;
+        this._minSrcX = null;
+        this._minSrcY = null;
+        // Sets to default (true) the variables that save the current range of the source and destiny arrays
+        this._srcPointsAreNormalized = true;
+        this._dstPointsAreNormalized = true;
+        // Sets the auxiliar variable that will save for the source image, to which triangle of the mesh belongs each coord in "piecewiseaffine" 
         this._trianglesCorrespondencesMatrix = null;
+        this._triangles = null;
+        // Sets the variables that will save the transform matrices
         this._transformMatrix = null;
+        this._piecewiseMatrices = null;
+        // Allocate some auxiliar memory for avoiding to allocate any new memory during the "piecewiseaffine" matrix calculations 
+        this._auxSrcTriangle = new Float32Array(3*dims);
+        this._auxDstTriangle = new Float32Array(3*dims);
 
     }
+
     /**
-     * Set the source points ([[x1, y1], [x2, y2]]) of the transform and, optionally, the image that will be transformed.
+     * Summary.                     Sets the source reference points ([[x1, y1], [x2, y2], ...]) of the transform and, optionally,
+     *                              the image that will be transformed.
      * 
-     * @param {ArrayBuffer | Array} points   Source points of the transform, given as a BufferArray or Array in the form [x1, y1, x2, y2...]
-     *                                       or [[x1, y1], [x2, y2]...]. These source points should be declared in image coordinates, (x : [0, width],
-     *                                       y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]);
-     * @param {HTMLImageElement}    [image]  Optional source image, that will be warped later. Setting this element here will improve the
-     *                                       warping performance when it is planned to apply multiple transformations (same source points
-     *                                       different destiny points) to the same image, specially when source image have a transparent background.
-     * @param {Number}              [width]  Only applied if image parameter is provided. Internally resizes the image to the given width. If not provided,
-     *                                       original image width will be used (widths lowers than the original image will improve speed at cost of resolution).
-     * @param {Number}              [height] Only applied if image parameter is provided. Internally resizes the image to the given height. If not provided,
-     *                                       original image height will be used (heights lowers than the original image will improve speed at cost of resolution).
+     * Description.                 Source reference points is a set of 2-D coordinates determined in the input image that will exactly go to
+     *                              the correspondent destiny points coordinates (setted through setDstPoints()) in the output image. The rest
+     *                              of coordinates of the image will be interpolated through the geometrical transform estimated f these ones.
+     * 
+     * @param {ArrayBuffer | Array}  points      Source points of the transform, given as a BufferArray or Array in the form [x1, y1, x2, y2...]
+     *                                           or [[x1, y1], [x2, y2]...]. These source points should be declared in image coordinates, (x : [0, width],
+     *                                           y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]). To allow rescalings (from x0 to x8),
+     *                                           normalized scale is automatically detected when the points array does not contain any value larger than 8.0.
+     *                                           Coordinates with larger numbers are considered to be in image scale. For avoiding this automatic behaviour use the 
+     *                                           pointsAreNormalized paremeter. Please note that, if width and height parameters are setted and points are given in
+     *                                           image coordinates, these image coordinates should be declared in terms of the given width and height, (not in terms
+     *                                           of the original image width/height).
+     * 
+     * @param {HTMLImageElement}     [image]     Optional source image, that will be warped later. Setting this element here will help to advance some calculations
+     *                                           improving the later warping performance, specially when it is planned to apply multiple transformations (same source points
+     *                                           different destiny points) to the same image. If width and/or height are given image will be internally rescaled previous
+     *                                           to any transformation.
+     * 
+     * @param {Number}               [width]     Optional width of the input image. If given, it will resize the input image to that width. Lower widths will imply faster
+     *                                           transformations at the cost of lower resolution in the output image, while larger widths will produce higher resolution images
+     *                                           at the cost of processing time. If null, it will use the original image width.
+     * 
+     * @param {Number}               [height]    Optional height of the input image. If given, it will resize the input image to that height. Lower heights will imply faster
+     *                                           transformations at the cost of lower resolution in the output image, while larger heights will produce higher resolution images
+     *                                           at the cost of processing time. If null, it will use the original image height.
+     * 
+     * @param {Boolean}  [pointsAreNormalized]   Optional boolean determining if the parameter points is in normalized or in image coordinates. If not given it will be
+     *                                           automatically inferred from the points array.
+     * 
      */
-    setSourcePoints(points, image = null, width = null, height = null){
+    setSourcePoints(points, image = null, width = null, height = null, pointsAreNormalized = null){
         // If it is given as a list, transform it to an Float32Array for improving performance.
         if(!ArrayBuffer.isView(points)) points = new Float32Array(points.flat())
+        // Set the source points property
         this._srcPoints = points;
-        this._srcPointsAreNormalized = !containsValueGreaterThan(this._srcPoints, normalizedMax);
+        // Check if it is given in normalized coordinates, if this information is not given.
+        this._srcPointsAreNormalized = pointsAreNormalized === null? !containsValueGreaterThan(this._srcPoints, normalizedMax) : pointsAreNormalized;
 
-        // Verifies if the selected transform is coherent with the srcPoints given, or select the best one if 'auto' is selected.
+        // Verifies if the selected transform is coherent with the points array given, or select the best one if 'auto' mode is selected.
         this.transform = checkAndSelectTransform(this.firstTransformSelected, this._srcPoints);
 
-        // Set the image if given
+        // Set the image property if given. If also given, it will also set the width and height as well as to resize the image.
         if (image !== null){
             this.setImage(image, width, height);
-        // In case that there were no image given but height and width, apply it.
+        // If no image was given but height and width were, set them.
         } else if (width !== null || height !== null){
-            this.setSrcWidthHeight(width, height);
+            this._setSrcWidthHeight(width, height); //It will denormalize the srcPoints array
         }
-
-        if (this.transform === 'piecewiseaffine' && !this._srcPointsAreNormalized && this._trianglesCorrespondencesMatrix === null){
-            this.setAffinePiecewiseTransformParameters();
+        
+        // In case that no width or height were given, but points were already in image coordinates, the "piecewiseaffine" correspondence matrix is still calculable.
+        if (this.transform === 'piecewiseaffine' && this._trianglesCorrespondencesMatrix === null){
+            // Unset any previous information about Piecewise Affine auxiliar matrices, as they are not reutilizable when source points are modified.
+            this._triangles = null;
+            this._piecewiseMatrices = null
+            // If there is information for calculating the auxiliar piecewise matrices, calculate them
+            if (!this._srcPointsAreNormalized || (this._width > 0 && this._height > 0)){
+                // Set all the parameters that can be already set
+                this._setPiecewiseAffineTransformParameters();
+            // Otherwise calculate only the tringles mesh, that is the unique that can be actually calculated.
+            } else {
+                this._triangles = Delaunay(this._srcPoints);
+            }
         }
     }
 
     /**
-     * Set the image that will be transformed later. Internally, it implies that the source points will be rescaled to the new image shape
-     * in case that they were given as normalized.
+     * Summary.                     Sets the image that will be transformed when warping.
      * 
-     * @param {HTMLImageElement}  image    Image that will internally saved for future warping. Although it is not necessary to be priorly setted,
-     *                                     setting it from the very beginning will improve the performance of future steps, specially when multiple
-     *                                     warpings will be applied to the same image.
-     * @param {Number}            [width]  Optional width. Resizes the image to the given width. If not provided, original image width will be used
-     *                                     (widths lowers than the original image width will improve speed at cost of resolution).
-     * @param {Number}            [height] Optional height. Resizes the image to the given height. If not provided, original image height will be used
-     *                                     (heights lowers than the original image height will improve speed at cost of resolution).
+     * Description.                 Setting the image before the destiny points (setDstPoints()) and the warping (call to warp()) will help to advance
+     *                              calculations as well as to avoid future redundant calculations when successive calls to setDstPoints()->warp() will
+     *                              occur in the future. It will severally improve the performance of applications that can take profit of that, as for
+     *                              example those ones that have a static source image that must be continually adapted to different dstPoints detections
+     *                              coming from a videoStream. This performance improvement will specially highligth for the "piecewiseaffine" transform,
+     *                              as it is the one that is more computationally expensive.
+     * 
+     * @param {HTMLImageElement}  image    Image that will internally saved for future warping (warp()).
+     * 
+     * @param {Number}            [width]  Optional width. Resizes the input image to the given width. If not provided, original image width will be used
+     *                                     (widths lowers than the original image width will improve speed at cost of resolution). It is not recommended
+     *                                     to set widths below the expected output width, since at this point the speed improvement will dissapear and
+     *                                     only resolution will be worsen.
+     * 
+     * @param {Number}            [height] Optional height. Resizes the input image to the given height. If not provided, original image height will be used
+     *                                     (heights lowers than the original image height will improve speed at cost of resolution). It is not recommended
+     *                                     to set heights below the expected output height, since at this point the speed improvement will dissapear and
+     *                                     only resolution will be worsen.
+     * 
      */
     setImage(image, width = null, height = null){
-        // Set the current width and height of the image
-        if (this._w === null || this._h === null)
-            this.setSrcWidthHeight((width === null? image.width : width), (height === null? image.height : height));
+        // Set the current width and height of the input. As the width/height given by the user or the original width/height of the image if not given
+        if (this._width === null || this._height === null)
+            this._setSrcWidthHeight((width === null? image.width : width), (height === null? image.height : height));
+        
+        // Sets the image as a flat Uint8ClampedArray, for dealing fast with it. It will also resize the image if needed.
         this._HTMLImage = image;
         this._image = this._getImageAsRGBAArray(image);
-        // If source points are already set
-        if(this._srcPoints !== null){
-            // Transform to image coordinates if normalized coordinates were given
-            /*if (this._srcPointsAreNormalized){
-                denormalizePoints(this._srcPoints, this._w, this._h);
-                this._srcPointsAreNormalized = false;
-            }*/
-            // If piecewiseaffine transform is (and sourcePoints are set) prepare the auxiliar matrices for this transform
-            if (this.transform === 'piecewiseaffine' && this._trianglesCorrespondencesMatrix === null){
-                this.setAffinePiecewiseTransformParameters();
-            }
-        }
-        // <= 0 includes null
-        if (this._dstPoints !== null && (this._objectiveW <= 0 || this._objectiveH <= 0)){
-            this.induceBestObjectiveWidthAndHeight();
-        }
-    }
-
-    setAffinePiecewiseTransformParameters(){
-        if (!this._srcPointsAreNormalized){
-            // Set the maxSrcX and maxSrcY. By the program logic, if it happens it is ensured that it did not happen in setSourcePoints(points) function
-            [this._minSrcX, this._minSrcY, this._maxSrcX, this._maxSrcY] = minmaxXYofArray(this._srcPoints);
-            this._build_triangles();
-            if(this._dstPoints !== null){
-                if(this._isDstArrayNormalized){
-                    this.induceBestObjectiveWidthAndHeight();
-                    denormalizePoints(this._dstPoints, this._objectiveW, this._objectiveH);
-                    this._isDstArrayNormalized = false;
-                }
-                this.piecewiseMatrices = this._calculatePiecewiseAffineTransformMatrices(this._dstPoints);
-            }
-        } else {
-            throw("Trying to set the Piecewise Affine Transform parameters without knowing the source points ranges")
-        }
-    }
-
-    setSrcWidthHeight(width, height){
-        const last_width = this._w;
-        const last_height = this._h;
-        this._w = width;
-        this._h = height;
-        if(last_width !== width || last_height !== height){
-            width = Math.round(width);
-            height = Math.round(height);
-            if (this._hiddenCanvas.width < width) {this._hiddenCanvas.width = width;}
-            if (this._hiddenCanvas.height < height) {this._hiddenCanvas.height = height;} 
-            if(this._srcPoints !== null && this._srcPointsAreNormalized){
-                denormalizePoints(this._srcPoints, this._w, this._h);
-                this._srcPointsAreNormalized = false;
-                // If piecewiseaffine transform is (and sourcePoints are set) prepare the auxiliar matrices for this transform
-                if (this.transform === 'piecewiseaffine' && this._trianglesCorrespondencesMatrix === null){
-                    this.setAffinePiecewiseTransformParameters();
-                }
-            }
-            // Resize the image if necessary
-            if(this._image !== null && this._HTMLImage !== null){
-                this._image = this._getImageAsRGBAArray(this._HTMLImage);
-            }
+        
+        // If destiny points are already set but objectiveWidth and objectiveHeight are not, set them now.
+        if (this._dstPoints !== null && (this._objectiveWidth <= 0 || this._objectiveHeight <= 0)){
+            this._induceBestObjectiveWidthAndHeight();
         }
 
+        // If source points are already set, now it is possible to calculate the "piecewiseaffine" parameters if needed.
+        if(this._srcPoints !== null && this.transform === 'piecewiseaffine'){
+            // Calculate all the auxiliar parameters that can be already calculated
+            this._setPiecewiseAffineTransformParameters();
+        }
     }
 
     /**
-     * Only useful for Piecewise Affine transform. Defines a mesh of triangles connecting each trio of closest points and generates a matrix with the size of
-     * this mesh defining to which of these triangles belongs each coordinate. 
-     */
-    _build_triangles(){
-        // Generate the triangles from the Delaunay method
-        this._triangles = Delaunay(this._srcPoints);
-        // Calculate a matrix determining from which triangle comes each coordinate of the image.
-        this._trianglesCorrespondencesMatrix = this.buildTrianglesCorrespondencesMatrix();
-    }
-
-    /**
-     * Set the destiny points ([[x1, y1], [x2, y2]]). Internally, it means that the corresponding transform matrices are calculated. Slight performance
-     * improvement comes when width and height parameters are given, but take into account that outputs widths greaters than the source width could 
-     * imply artifacts in the output image (this problem will be solved in future updates).
+     * Summary.                     Sets the destiny reference points ([[x1, y1], [x2, y2], ...]) of the transform.
      * 
-     * @param {ArrayBuffer | Array} points   Destiny points of the transform, given as a BufferArray or Array in the form [x1, y1, x2, y2...]
-     *                                       or [[x1, y1], [x2, y2]...]. These source points should be declared in image coordinates, (x : [0, width],
-     *                                       y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]);
-     * @param {Number}              [width]  Optional width. Only used if normalized coords were given. Expected width of the output image, 
-     *                                       if not given the maximum of the points array will be used as width.
-     * @param {Number}              [height] Optional height. Only used if normalized coords were given. Expected height of the output image, 
-     *                                       if not given the maximum of the points array will be used as height.
+     * Description.                 Destiny reference points is a set of 2-D coordinates determined for the output image. They must match with the
+     *                              source points, as each source points of the input image will be transformed for going exactly to its correspondent
+     *                              destiny points in the output image. The rest of coordinates of the image will be interpolated through the geometrical
+     *                              transform estimated from these correspondences.
+     * 
+     * @param {ArrayBuffer | Array}    points    Destiny points of the transform, given as a BufferArray or Array in the form [x1, y1, x2, y2...]
+     *                                           or [[x1, y1], [x2, y2]...]. These source destiny should be declared in image coordinates, (x : [0, width],
+     *                                           y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]). 
+     *                                           To allow rescalings (from x0 to x8), normalized scale is automatically detected when the points array does not
+     *                                           contain any value larger than 8.0. Coordinates with larger numbers are considered to be in image scale.
+     *                                           For avoiding this automatic behaviour use the pointsAreNormalized paremeter.
+     * 
+     * @param {Boolean}  [pointsAreNormalized]   Optional boolean determining if the parameter points is in normalized or in image coordinates. If not given it will be
+     *                                           automatically inferred from the points array.
+     * 
      */
-    setDstPoints(points){
+     setDstPoints(points, pointsAreNormalized = null){
         // Transform it to a typed array for perfomance reasons
         if(!ArrayBuffer.isView(points)) points = new Float32Array(points.flat());
         // Verify that these points matches with the source points
         if(points.length !== this._srcPoints.length) 
             throw(`It must be the same amount of destiny points (${points.length/dims}) than source points (${this._srcPoints.length/dims})`);
-    
+        // Set them
         this._dstPoints = points;
-        this._isDstArrayNormalized = !containsValueGreaterThan(this._dstPoints, normalizedMax);
-        // Transform matrix must exist for affine when calculating the output size
+        this._dstPointsAreNormalized = pointsAreNormalized === null? !containsValueGreaterThan(this._dstPoints, normalizedMax) : pointsAreNormalized;
+
+        // As both source and destiny points are set now, calculate the transformation matrix for whichever the selected transform is
         if (this.transform !== 'piecewiseaffine'){
+            // Ensure that destiny and source points are in the same range
             this._putSrcAndDstPointsInSameRange();
+            // Calculate the projective or the affine transform
             this._transformMatrix = calculateTransformMatrix(this.transform, this._srcPoints, this._dstPoints);
+       } else {
+           // Unset piecewiseMatrices as they turns invalid when dstPoints are changed
+           this._piecewiseMatrices = null; 
+       }
+        
+        // If there is enough information for calculating the objective width and height, calculate it
+        if (this._image !== null || !this._dstPointsAreNormalized || (this.transform === 'piecewiseaffine' && this._width > 0 && this._height > 0)){
+            this._induceBestObjectiveWidthAndHeight();
+            if (this._hiddenCanvas.width < this._objectiveWidth) {this._hiddenCanvas.width = this._objectiveWidth;}
+            if (this._hiddenCanvas.height < this._objectiveHeight) {this._hiddenCanvas.height = this._objectiveHeight;} 
         }
-
         
-        this.induceBestObjectiveWidthAndHeight();
-        
-        if (this._hiddenCanvas.width < this._objectiveW) {this._hiddenCanvas.width = this._objectiveW;}
-        if (this._hiddenCanvas.height < this._objectiveH) {this._hiddenCanvas.height = this._objectiveH;} 
-
-        
-        // Transform the points to image coordinates if normalized coordinates were given
-        if (this.transform === 'piecewiseaffine' && this._objectiveW > 0 && this._objectiveH > 0){
-            if (this._isDstArrayNormalized){
-                denormalizePoints(this._dstPoints, this._objectiveW, this._objectiveH);
-                this._isDstArrayNormalized = false;
+        // If Piecewise Affine transform were selected and there is enough information, calculate all the auxiliar structures
+        if (this.transform === 'piecewiseaffine' && this._objectiveWidth > 0 && this._objectiveHeight > 0){
+            // Transform the points to image coordinates if normalized coordinates were given
+            if (this._dstPointsAreNormalized){
+                denormalizePoints(this._dstPoints, this._objectiveWidth, this._objectiveHeight);
+                this._dstPointsAreNormalized = false;
             }
-            this.piecewiseMatrices = this._calculatePiecewiseAffineTransformMatrices(points);
+            // Set the parameters piecewise affine parameters that can be already set
+            this._setPiecewiseAffineTransformParameters();
         }
         
     }
 
-    _calculatePiecewiseAffineTransformMatrices(dstPoints){
-        let piecewiseMatrices = [];
-        for(const triangle of this._triangles){
-            // Set in the already allocated memory for doing it faster and keep it as an Int16Array (It would be nice to check other options (including async function))
-            //Set the srcTriangle
-            this._auxSrcTriangle[0] = this._srcPoints[triangle[0]*dims]; this._auxSrcTriangle[1] = this._srcPoints[triangle[0]*dims+1];
-            this._auxSrcTriangle[2] = this._srcPoints[triangle[1]*dims]; this._auxSrcTriangle[3] = this._srcPoints[triangle[1]*dims+1];
-            this._auxSrcTriangle[4] = this._srcPoints[triangle[2]*dims]; this._auxSrcTriangle[5] = this._srcPoints[triangle[2]*dims+1];
-            //Set the dstTriangle
-            this._auxDstTriangle[0] = dstPoints[triangle[0]*dims]; this._auxDstTriangle[1] = dstPoints[triangle[0]*dims+1];
-            this._auxDstTriangle[2] = dstPoints[triangle[1]*dims]; this._auxDstTriangle[3] = dstPoints[triangle[1]*dims+1];
-            this._auxDstTriangle[4] = dstPoints[triangle[2]*dims]; this._auxDstTriangle[5] = dstPoints[triangle[2]*dims+1];
-            piecewiseMatrices.push(affineMatrixFromTriangles(this._auxSrcTriangle, this._auxDstTriangle))
+    /* ----------------------------------------------- PRIVATE FUNCTIONS -------------------------------------------------- */
+    /* --------------------------------- These functions should not be used by the user ----------------------------------- */
+    
+    /**
+     * 
+     * Summary.                     PRIVATE. AVOID TO USE IT. Sets this._width and this._height properties in a consistent way with the rest of the object. 
+     * 
+     * Description.                 PRIVATE. AVOID TO USE IT. It sets the source width and source height properties in an efficient and safe way. It ensures
+     *                              that all modifications to dependant objects are done. It means that the hidden canvas, and the currently setted image are
+     *                              resized if needed, that this._width and this._height are Integer numbers and that in the case of Piecewise Affine transform
+     *                              the auxiliar matrices are recalculated.
+     * 
+     * @param {Number}    width     New width of the input. 
+     * 
+     * @param {Number}    height    New height of the input.
+     * 
+     */
+    _setSrcWidthHeight(width, height){
+        const last_width = this._width;
+        const last_height = this._height;
+        this._width = width;
+        this._height = height;
+        // If width and height are the same than before don't do anything. As all the previous structures are already valid
+        if(last_width !== width || last_height !== height){
+            this._width = Math.round(width);
+            this._height = Math.round(height);
+            // If source width is modified, delete the trianglesCorrespondenceMatrix, as it turns invalid.
+            this._trianglesCorrespondencesMatrix = null;
+
+            // Resize the hidden canvas if needed, for ensuring that no parts of the images will be lost in the HTMLImageElement->Uint8ClampedArray transformation. 
+            if (this._hiddenCanvas.width < this._width) {this._hiddenCanvas.width = this._width;}
+            if (this._hiddenCanvas.height < this._height) {this._hiddenCanvas.height = this._height;}
+
+            // Resize the image if necessary
+            if(this._image !== null && this._HTMLImage !== null){
+                this._image = this._getImageAsRGBAArray(this._HTMLImage);
+            }
+
+            // Finally if piecewise affine transform set its parameters again as now it is sure that width and height are known
+            if (this._srcPoints !== null && this.transform === 'piecewiseaffine'){
+                this._setPiecewiseAffineTransformParameters();
+            }
         }
-        return piecewiseMatrices;
     }
 
-    induceBestObjectiveWidthAndHeight(){
-        // Best case
-        if ((this.transform === 'affine' || this.transform === 'projective')  && this._transformMatrix !== null){
-            [this._xOutputOffset, this._yOutputOffset, this._objectiveW, this._objectiveH] = calculateTransformLimits(this._transformMatrix, this._w, this._h);
-        } else if (this._isDstArrayNormalized){
-            // It will be denormalized right when ending this function
+
+    /**
+     * 
+     * Summary.                     PRIVATE. AVOID TO USE IT. Induce the best value for the this._objectiveWidth and this._objectiveHeight properties.
+     * 
+     * Description.                 PRIVATE. AVOID TO USE IT. It sets the destiny objectiveWidth and objectiveHeight properties in an efficient and safe way.
+     *                              It ensures that all modifications to dependant objects are done. It means that the hidden canvas is resized if needed.
+     *                              In case of Affine or Projective transforms are selected, and its transforms matrices are calculated or calculable (best case)
+     *                              defines the objectiveWidth and objectiveHeight in order to fit the whole output image without any pad or crop. Otherwise,
+     *                              it tries to do its best with the information available.
+     * 
+     */
+    _induceBestObjectiveWidthAndHeight(){
+        // Best case. Affine or Projective transform. In this case, it is possible to calculate the exact bounds of the output image.
+        if ((this.transform === 'affine' || this.transform === 'projective')){
+            // If transform matrix is not calculated by any reason, calculate it now.
+            if (this._transformMatrix === null){
+                if (this._srcPointsAreNormalized !== this._dstPointsAreNormalized){
+                    this._putSrcAndDstPointsInSameRange();
+                }
+                this._transformMatrix = calculateTransformMatrix(this.transform, this._srcPoints, this._dstPoints);
+            }
+            // Set the output width and height variables to the limits of the estimated transformation
+            [this._xOutputOffset, this._yOutputOffset, this._objectiveWidth, this._objectiveHeight] = calculateTransformLimits(this._transformMatrix, this._width, this._height); 
+        // If piecewise transform is selected try if, at least, dstPoints are no normalized, so output width and height can be extracted from here. 
+        } else if (!this._dstPointsAreNormalized){
+            // TODO: Check the case where this information can be inferred from the piecewiseMatrices. Maybe dividing this._dstPoints max between the input
+            this._xOutputOffset = null;
+            this._yOutputOffset = null;
+            [ , , this._objectiveWidth, this._objectiveHeight] = minmaxXYofArray(this._dstPoints);
+        
+        // If piecewise transform is selected and dstPoints are normalized, set the output width and height as the input, since it is the best it can do.
+        } else {
             /*console.warn("Array of destiny points is normalized, but width and height parameters are not given. "+
                          "Width and Height of the source will be used but it could be undesired in some cases.");*/
-            this._objectiveW = this._w;
-            this._objectiveH = this._h;
-        } else {
-            if (this.transform === 'piecewiseaffine'){
-                this._xOutputOffset = null;
-                this._yOutputOffset = null;
-                [ , , this._objectiveW, this._objectiveH] = minmaxXYofArray(this._dstPoints);
-            }else {
-                throw("Impossible to deduce width and height for the output");
-            }   
+            this._objectiveWidth = this._width;
+            this._objectiveHeight = this._height;       
         }
-        if (this._hiddenCanvas.width < this._objectiveW) {this._hiddenCanvas.width = this._objectiveW;}
-        if (this._hiddenCanvas.height < this._objectiveH) {this._hiddenCanvas.height = this._objectiveH;}
+
+        // Finally modify the hidden canvas width and height if needed
+        if (this._hiddenCanvas.width < this._objectiveWidth) {this._hiddenCanvas.width = this._objectiveWidth;}
+        if (this._hiddenCanvas.height < this._objectiveHeight) {this._hiddenCanvas.height = this._objectiveHeight;}
     }
+
+    _setPiecewiseAffineTransformParameters(){
+        if (this._srcPoints !== null){
+            if (this._triangles === null){
+                // Generate the triangles from the Delaunay method
+                this._triangles = Delaunay(this._srcPoints);
+            }
+            // Denormalize source points if they are normalized. In order to build the matrix of triangles correspondence if possible.
+            if (this._srcPointsAreNormalized){
+                if (this._width > 0 && this._height > 0){
+                    denormalizePoints(this._srcPoints, this._width, this._height);
+                    this._srcPointsAreNormalized = false;
+                } else {
+                    throw("Trying to set the Piecewise Affine Transform parameters without knowing the source points ranges");
+                }
+            }
+
+            // Try to set all the auxiliar parameters for performing the future "piecewise" transforms as fast as possible. Don't set them again if they already existed.
+            // NOTE that it forces to unset them (set as null) when source points are modified.
+            if (!this._srcPointsAreNormalized && (this._triangles === null || this._trianglesCorrespondencesMatrix === null)){
+                // Set the maxSrcX and maxSrcY. By the program logic, if it happens it is ensured that it did not happen in setSourcePoints(points) function
+                [this._minSrcX, this._minSrcY, this._maxSrcX, this._maxSrcY] = minmaxXYofArray(this._srcPoints);
+                this._trianglesCorrespondencesMatrix = this.buildTrianglesCorrespondencesMatrix();
+            }
+
+            // If destiny points are known (as well as source points), build also the transformation matrices if they did not exist.
+            // NOTE that it forces to unset piecewiseMatrices (set as null) when source points or destiny points are modified.
+            if(this._dstPoints !== null && this._piecewiseMatrices === null && this._triangles !== null){
+                if(this._dstPointsAreNormalized){
+                    // Ensure that objectiveWidth and objectiveHeight are set before to use them.
+                    if (this._objectiveWidth <= 0 || this._objectiveHeight <= 0){ 
+                        this._induceBestObjectiveWidthAndHeight();
+                    }
+                    // Denormalize dstPoints for putting them in the same range than srcPoints
+                    denormalizePoints(this._dstPoints, this._objectiveWidth, this._objectiveHeight);
+                    this._dstPointsAreNormalized = false;
+                }
+                this._piecewiseMatrices = this._calculatePiecewiseAffineTransformMatrices();
+            }
+        } else {
+            throw("Trying to set the Piecewise Affine Transform parameters before setting the Source Points.")
+        }
+    }
+
+    _calculatePiecewiseAffineTransformMatrices(){
+        // Ensure that both source and destiny points are in the same range
+        if (this._srcPointsAreNormalized !== this._dstPointsAreNormalized){
+            this._putSrcAndDstPointsInSameRange();
+        }
+            let piecewiseMatrices = [];
+            for(const triangle of this._triangles){
+                // Set in the already allocated memory for doing it faster and keep it as an Int16Array (It would be nice to check other options (including async function))
+                //Set the srcTriangle
+                this._auxSrcTriangle[0] = this._srcPoints[triangle[0]*dims]; this._auxSrcTriangle[1] = this._srcPoints[triangle[0]*dims+1];
+                this._auxSrcTriangle[2] = this._srcPoints[triangle[1]*dims]; this._auxSrcTriangle[3] = this._srcPoints[triangle[1]*dims+1];
+                this._auxSrcTriangle[4] = this._srcPoints[triangle[2]*dims]; this._auxSrcTriangle[5] = this._srcPoints[triangle[2]*dims+1];
+                //Set the dstTriangle
+                this._auxDstTriangle[0] = this._dstPoints[triangle[0]*dims]; this._auxDstTriangle[1] = this._dstPoints[triangle[0]*dims+1];
+                this._auxDstTriangle[2] = this._dstPoints[triangle[1]*dims]; this._auxDstTriangle[3] = this._dstPoints[triangle[1]*dims+1];
+                this._auxDstTriangle[4] = this._dstPoints[triangle[2]*dims]; this._auxDstTriangle[5] = this._dstPoints[triangle[2]*dims+1];
+                piecewiseMatrices.push(affineMatrixFromTriangles(this._auxSrcTriangle, this._auxDstTriangle))
+            }
+            return piecewiseMatrices;
+    }
+
+    
 
     _putSrcAndDstPointsInSameRange(){
         
         // If they are not in the same range, try to always modify source. 
         // It should avoid future computation as destiny points will usually be given always in the same range. 
-        if (this._isDstArrayNormalized !== this._srcPointsAreNormalized){
+        if (this._dstPointsAreNormalized !== this._srcPointsAreNormalized){
             // If destiny array is normalized try to also normalize srcArray
-            if (this._isDstArrayNormalized && this._w > 0 && this._h > 0){
-                normalizePoints(this._srcPoints, this._w, this._h);
+            if (this._dstPointsAreNormalized && this._width > 0 && this._height > 0){
+                normalizePoints(this._srcPoints, this._width, this._height);
                 this._srcPointsAreNormalized = true;
             // Otherwise, try to denormalize source.
-            } else if (this._srcPointsAreNormalized && this._w > 0 && this._h > 0){
-                denormalizePoints(this._srcPoints, this._w, this._h);
+            } else if (this._srcPointsAreNormalized && this._width > 0 && this._height > 0){
+                denormalizePoints(this._srcPoints, this._width, this._height);
                 this._srcPointsAreNormalized = false;
             } else {
                 throw("Impossible to put source and destiny points in the same range. Possible solutions: \n"+
@@ -347,23 +476,23 @@ class Homography {
                 break;
             case 'affine':
             case 'projective':
-                if (this._objectiveW > this._w || this._objectiveH > this._h){
+                if (this._objectiveWidth > this._width || this._objectiveHeight > this._height){
                     output_img = this._inverseSimpleWarp(this._image);
                 } else {
                     output_img = this._simpleWarp(this._image);
                 }
                 break;
         }
-        output_img = new ImageData(output_img, this._objectiveW, this._objectiveH);
+        output_img = new ImageData(output_img, this._objectiveWidth, this._objectiveHeight);
         return output_img;
     }
 
     _piecewiseAffineWarp(image){
-        const srcRowLenght = this._w<<2;
-        const dstRowLenght = this._objectiveW<<2;
+        const srcRowLenght = this._width<<2;
+        const dstRowLenght = this._objectiveWidth<<2;
         const triangleCorrespondenceMatrixWidth = this._maxSrcX-this._minSrcX;
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
-        let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveH);
+        let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveHeight);
         //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
         for (let y = this._minSrcY; y < this._maxSrcY; y++){
             for (let x = this._minSrcX; x < this._maxSrcX; x++){
@@ -371,7 +500,7 @@ class Homography {
                 if (inTriangle > -1){
                     //Get the index of y, x coordinate in the source image ArrayBuffer (<<2 is a faster version of *4)
                     const idx = (y*srcRowLenght)+(x<<2);
-                    let [newX, newY] = applyAffineTransformToPoint(this.piecewiseMatrices[inTriangle], x, y);
+                    let [newX, newY] = applyAffineTransformToPoint(this._piecewiseMatrices[inTriangle], x, y);
                     newX = Math.round(newX); newY = Math.round(newY);
                     //Get the index of y, x coordinate in the output image ArrayBuffer (binary shift (<<2) is a faster version of *4)
                     const newIdx = (newY*dstRowLenght)+(newX<<2);
@@ -380,7 +509,7 @@ class Homography {
                     output_img[newIdx+2] = image[idx+2], output_img[newIdx+3] = image[idx+3]; 
                 // TODO: ERASE IT AFTER DEBUGGING
                 } else {
-                    const newIdx = (y*this._objectiveW<<4)+(x<<4);
+                    const newIdx = (y*this._objectiveWidth<<4)+(x<<4);
                     output_img[newIdx] = 255, output_img[newIdx+1] = 0,
                     output_img[newIdx+2] = 0, output_img[newIdx+3] = 255; 
                 }
@@ -390,15 +519,15 @@ class Homography {
     }
 
     _simpleWarp(image){
-        const srcRowLenght = this._w<<2;
-        const dstRowLenght = this._objectiveW<<2;
+        const srcRowLenght = this._width<<2;
+        const dstRowLenght = this._objectiveWidth<<2;
         let transformPoint = getTransformFunction(this.transform);
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
-        let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveH);
+        let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveHeight);
         //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
 
-        for (let y = 0; y < this._h; y++){
-            for (let x = 0; x < this._w; x++){
+        for (let y = 0; y < this._height; y++){
+            for (let x = 0; x < this._width; x++){
                     //Get the index of y, x coordinate in the source image ArrayBuffer (<< 2 is a faster version of *4)
                     const idx = (y*srcRowLenght)+(x<<2);
                     let [newX, newY] = transformPoint(this._transformMatrix, x, y);
@@ -413,20 +542,20 @@ class Homography {
     }
 
     _inverseSimpleWarp(image){
-        const srcRowLenght = this._w<<2;
-        const dstRowLenght = this._objectiveW<<2;
+        const srcRowLenght = this._width<<2;
+        const dstRowLenght = this._objectiveWidth<<2;
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
-        let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveH);
+        let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveHeight);
         // Calculate it in the opposite direction
         this._putSrcAndDstPointsInSameRange();
         const inverseTransformMatrix = calculateTransformMatrix(this.transform, this._dstPoints, this._srcPoints);
         let transformPoint = getTransformFunction(this.transform);
         // Track the full output image (going from _outputOffset to _objective+_outputOffset avoid white offsets)
-        for (let y = this._yOutputOffset; y < this._objectiveH+this._yOutputOffset; y++){
-            for (let x = this._xOutputOffset; x < this._objectiveW+this._xOutputOffset; x++){
+        for (let y = this._yOutputOffset; y < this._objectiveHeight+this._yOutputOffset; y++){
+            for (let x = this._xOutputOffset; x < this._objectiveWidth+this._xOutputOffset; x++){
                     let [srcX, srcY] = transformPoint(inverseTransformMatrix, x, y);   
                     //If point is inside source image
-                    if (srcX >= 0 && srcX < this._w && srcY >= 0 && srcY < this._h){
+                    if (srcX >= 0 && srcX < this._width && srcY >= 0 && srcY < this._height){
                         //Get the index in the destiny domain
                         const idx = ((y-this._yOutputOffset)*dstRowLenght)+((x-this._xOutputOffset)<<2);
                         //Get the index in the source domain
@@ -481,14 +610,14 @@ class Homography {
     }
 
     _getImageAsRGBAArray(image){
-        this._hiddenCanvasContext.clearRect(0, 0, this._w, this._h);
-        this._hiddenCanvasContext.drawImage(image, 0, 0, this._w, this._h); //image.width, image.height);
-        const imageRGBA = this._hiddenCanvasContext.getImageData(0, 0, this._w, this._h);
+        this._hiddenCanvasContext.clearRect(0, 0, this._width, this._height);
+        this._hiddenCanvasContext.drawImage(image, 0, 0, this._width, this._height); //image.width, image.height);
+        const imageRGBA = this._hiddenCanvasContext.getImageData(0, 0, this._width, this._height);
         return imageRGBA.data;
     }
     
     async HTMLImageElementFromImageData(imgData, asPromise = true){// Obtain a blob: URL for the image data.
-        this._hiddenCanvasContext.clearRect(0, 0, this._w, this._h);
+        this._hiddenCanvasContext.clearRect(0, 0, this._width, this._height);
         this._hiddenCanvasContext.putImageData(imgData, 0, 0);
         let img = document.createElement('img')
         img.src = this._hiddenCanvas.toDataURL();
@@ -507,8 +636,8 @@ class Homography {
         const rectangle = rectangleCircunscribingTriangle(triangle);
         //Set the the width to manage the offset of the matrix
         const trianglesCorrespondencesMatrixWidth = this._maxSrcX-this._minSrcX;
-        for (let x = rectangle.x; x < rectangle.x+rectangle.width; x++){
-            for (let y = rectangle.y; y < rectangle.y+rectangle.height; y++){
+        for (let y = rectangle.y; y < rectangle.y+rectangle.height; y++){
+            for (let x = rectangle.x; x < rectangle.x+rectangle.width; x++){
                 if (pointInTriangle(x, y, triangle)){
                     this._trianglesCorrespondencesMatrix[(y-this._minSrcY) * trianglesCorrespondencesMatrixWidth + (x-this._minSrcX)] = idx;
                 }
@@ -518,9 +647,9 @@ class Homography {
 
     fillByFloodFill(triangle, idx){
         const point = [Math.round(triangle[0]), Math.round(triangle[1])];
-        if (point[0] == this._w) point[0]-=1;
-        if (point[1] == this._h) point[1]-=1;
-        this._trianglesCorrespondencesMatrix[point[0]*this._w+point[1]] = idx;
+        if (point[0] == this._width) point[0]-=1;
+        if (point[1] == this._height) point[1]-=1;
+        this._trianglesCorrespondencesMatrix[point[0]*this._width+point[1]] = idx;
         // North
         this.floodFill(triangle, [point[0], point[1]-1], idx);
         // South
@@ -532,7 +661,7 @@ class Homography {
     }
 
     floodFill(triangle, point, idx){
-        const index = point[0]*this._w+point[1];
+        const index = point[0]*this._width+point[1];
         if(this._trianglesCorrespondencesMatrix[index] < 0 && 
             pointInTriangle(point[0], point[1], triangle)){
             this._trianglesCorrespondencesMatrix[index] = idx;

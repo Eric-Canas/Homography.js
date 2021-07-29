@@ -72,7 +72,6 @@ function test2(){
     // Sets the image jst before the warping
     // Call the warping without any image
     const result = identityHomography.warp();
-    console.log(result)
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
     addSecondsToTitle((s1-s0)/1000)
@@ -100,6 +99,7 @@ function test3(){
     identityHomography.setDstPoints(dstPoints);
     // Call the warping without any image
     const result = identityHomography.warp();
+    console.log(result)
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
     addSecondsToTitle((s1-s0)/1000)
