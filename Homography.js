@@ -141,6 +141,10 @@ class Homography {
         // Verifies if the selected transform is coherent with the points array given, or select the best one if 'auto' mode is selected.
         this.transform = checkAndSelectTransform(this.firstTransformSelected, this._srcPoints);
 
+        // Unset objective width and height as they can change when source width/height is changed
+        this._objectiveWidth = null;
+        this._objectiveHeight = null;
+
         // Set the image property if given. If also given, it will also set the width and height as well as to resize the image.
         if (image !== null){
             this.setImage(image, width, height);
@@ -190,22 +194,23 @@ class Homography {
      */
     setImage(image, width = null, height = null){
         // Set the current width and height of the input. As the width/height given by the user or the original width/height of the image if not given
-        if (this._width === null || this._height === null)
+        if (this._width === null || this._height === null){
             this._setSrcWidthHeight((width === null? image.width : width), (height === null? image.height : height));
+        }
         
         // Sets the image as a flat Uint8ClampedArray, for dealing fast with it. It will also resize the image if needed.
         this._HTMLImage = image;
         this._image = this._getImageAsRGBAArray(image);
-        
-        // If destiny points are already set but objectiveWidth and objectiveHeight are not, set them now.
-        if (this._dstPoints !== null && (this._objectiveWidth <= 0 || this._objectiveHeight <= 0)){
-            this._induceBestObjectiveWidthAndHeight();
-        }
 
         // If source points are already set, now it is possible to calculate the "piecewiseaffine" parameters if needed.
         if(this._srcPoints !== null && this.transform === 'piecewiseaffine'){
             // Calculate all the auxiliar parameters that can be already calculated
             this._setPiecewiseAffineTransformParameters();
+        }
+
+        // If destiny points are already set but objectiveWidth and objectiveHeight are not, set them now.
+        if (this._dstPoints !== null && (this._objectiveWidth <= 0 || this._objectiveHeight <= 0)){
+            this._induceBestObjectiveWidthAndHeight();
         }
     }
 
@@ -250,17 +255,15 @@ class Homography {
        }
         
         // If there is enough information for calculating the objective width and height, calculate it
-        if (this._image !== null || !this._dstPointsAreNormalized || (this.transform === 'piecewiseaffine' && this._width > 0 && this._height > 0)){
+        if (this._image !== null || (this.transform === 'piecewiseaffine' && this._width > 0 && this._height > 0)){
             this._induceBestObjectiveWidthAndHeight();
-            if (this._hiddenCanvas.width < this._objectiveWidth) {this._hiddenCanvas.width = this._objectiveWidth;}
-            if (this._hiddenCanvas.height < this._objectiveHeight) {this._hiddenCanvas.height = this._objectiveHeight;} 
         }
         
         // If Piecewise Affine transform were selected and there is enough information, calculate all the auxiliar structures
-        if (this.transform === 'piecewiseaffine' && this._objectiveWidth > 0 && this._objectiveHeight > 0){
+        if (this.transform === 'piecewiseaffine' && this._width > 0 && this._height > 0){
             // Transform the points to image coordinates if normalized coordinates were given
             if (this._dstPointsAreNormalized){
-                denormalizePoints(this._dstPoints, this._objectiveWidth, this._objectiveHeight);
+                denormalizePoints(this._dstPoints, this._width, this._height);
                 this._dstPointsAreNormalized = false;
             }
             // Set the parameters piecewise affine parameters that can be already set
@@ -340,17 +343,18 @@ class Homography {
             [this._xOutputOffset, this._yOutputOffset, this._objectiveWidth, this._objectiveHeight] = calculateTransformLimits(this._transformMatrix, this._width, this._height); 
         // If piecewise transform is selected try if, at least, dstPoints are no normalized, so output width and height can be extracted from here. 
         } else if (!this._dstPointsAreNormalized){
-            // TODO: Check the case where this information can be inferred from the piecewiseMatrices. Maybe dividing this._dstPoints max between the input
+            // TODO: Check the case where this information can be inferred from the piecewiseMatrices. (Maybe dividing this._dstPoints max between the input)
             this._xOutputOffset = null;
             this._yOutputOffset = null;
             [ , , this._objectiveWidth, this._objectiveHeight] = minmaxXYofArray(this._dstPoints);
         
         // If piecewise transform is selected and dstPoints are normalized, set the output width and height as the input, since it is the best it can do.
         } else {
+            const [minDstX, minDstY , maxDstX, maxDstY] = minmaxXYofArray(this._dstPoints, false);
             /*console.warn("Array of destiny points is normalized, but width and height parameters are not given. "+
                          "Width and Height of the source will be used but it could be undesired in some cases.");*/
-            this._objectiveWidth = this._width;
-            this._objectiveHeight = this._height;       
+            this._objectiveWidth = maxDstX*this._width;
+            this._objectiveHeight = maxDstY*this._height;
         }
 
         // Finally modify the hidden canvas width and height if needed
@@ -381,19 +385,15 @@ class Homography {
                 [this._minSrcX, this._minSrcY, this._maxSrcX, this._maxSrcY] = minmaxXYofArray(this._srcPoints);
                 this._trianglesCorrespondencesMatrix = this.buildTrianglesCorrespondencesMatrix();
             }
-
+            console.log("Points", this._dstPoints)
             // If destiny points are known (as well as source points), build also the transformation matrices if they did not exist.
             // NOTE that it forces to unset piecewiseMatrices (set as null) when source points or destiny points are modified.
             if(this._dstPoints !== null && this._piecewiseMatrices === null && this._triangles !== null){
                 if(this._dstPointsAreNormalized){
-                    // Ensure that objectiveWidth and objectiveHeight are set before to use them.
-                    if (this._objectiveWidth <= 0 || this._objectiveHeight <= 0){ 
-                        this._induceBestObjectiveWidthAndHeight();
-                    }
                     // Denormalize dstPoints for putting them in the same range than srcPoints
-                    denormalizePoints(this._dstPoints, this._objectiveWidth, this._objectiveHeight);
+                    denormalizePoints(this._dstPoints, this._width, this._height);
                     this._dstPointsAreNormalized = false;
-                }
+                }                
                 this._piecewiseMatrices = this._calculatePiecewiseAffineTransformMatrices();
             }
         } else {
@@ -494,6 +494,7 @@ class Homography {
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
         let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveHeight);
         //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
+       console.log( this._minSrcY, this._minSrcX, this._maxSrcY, this._maxSrcX)
         for (let y = this._minSrcY; y < this._maxSrcY; y++){
             for (let x = this._minSrcX; x < this._maxSrcX; x++){
                 const inTriangle = this._trianglesCorrespondencesMatrix[(y-this._minSrcY)*triangleCorrespondenceMatrixWidth+(x-this._minSrcX)]
@@ -617,11 +618,27 @@ class Homography {
     }
     
     async HTMLImageElementFromImageData(imgData, asPromise = true){// Obtain a blob: URL for the image data.
-        this._hiddenCanvasContext.clearRect(0, 0, this._width, this._height);
+        let previousCanvasWidth = null;
+        if (this._objectiveWidth !== this._hiddenCanvas.width){
+            previousCanvasWidth = this._hiddenCanvas.width;
+            this._hiddenCanvas.width = this._objectiveWidth;
+        }
+        let previousCanvasHeight = null;
+        if (this._objectiveHeight !== this._hiddenCanvas.height){
+            previousCanvasHeight = this._hiddenCanvas.height;
+            this._hiddenCanvas.height = this._objectiveHeight;
+        }
+
+        this._hiddenCanvasContext.clearRect(0, 0, this._objectiveWidth, this._objectiveHeight);
         this._hiddenCanvasContext.putImageData(imgData, 0, 0);
         let img = document.createElement('img')
         img.src = this._hiddenCanvas.toDataURL();
+        img.width = this._objectiveWidth;
+        img.height = this._objectiveHeight;
+        if (previousCanvasWidth !== null) {this._hiddenCanvas.width = previousCanvasWidth;}
+        if (previousCanvasHeight !== null) {this._hiddenCanvas.height = previousCanvasHeight;}
         //document.body.append(img);
+        
         if (asPromise){
             return new Promise((resolve, reject) => {
                 img.onload = () => resolve(img);
@@ -933,7 +950,7 @@ function containsValueGreaterThan(iterable, value){
     return false
 }
 
-function minmaxXYofArray(array){
+function minmaxXYofArray(array, rounded = true){
     let maxX = -10000;
     let maxY = -10000;
     let minX = 10000;
@@ -956,7 +973,11 @@ function minmaxXYofArray(array){
             }
         }
     }
-    return [Math.round(minX), Math.round(minY), Math.round(maxX), Math.round(maxY)];
+    if(rounded){
+        return [Math.round(minX), Math.round(minY), Math.round(maxX), Math.round(maxY)];
+    } else {
+        return [minX, minY, maxX, maxY];
+    }
 }
 
 function denormalizePoints(points, width, height){

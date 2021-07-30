@@ -14,7 +14,7 @@ function runTests(){
     test2();
     test3();
     test4();
-    test5();
+    //test5();
 
     addTitle("Affine Transforms");
     test6();
@@ -77,7 +77,7 @@ function test2(){
     addSecondsToTitle((s1-s0)/1000)
 
     drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0, identityHomography._triangles);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(denormalizePoints(dstPoints, w, h), canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
 }
@@ -104,7 +104,7 @@ function test3(){
     const s1 = performance.now();
     addSecondsToTitle((s1-s0)/1000)
     drawPointsInCanvas(squarePoints, canvasContext, 0, identityHomography._triangles);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(denormalizePoints(dstPoints, w, h), canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
 }
@@ -129,7 +129,7 @@ function test4(){
     const s1 = performance.now();
     drawPointsInCanvas(rectanglePoints, canvasContext, 0, identityHomography._triangles);
     addSecondsToTitle((s1-s0)/1000)
-    img.then(((img) => {canvasContext.drawImage(img, newW+padBetweenImgs, 0, newW, newH);
+    img.then(((img) => {canvasContext.drawImage(img, newW+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(dstPoints, canvasContext, newW+padBetweenImgs, identityHomography._triangles);}))
 }
@@ -162,7 +162,7 @@ function test5(){
     const s1 = performance.now();
     drawPointsInCanvas(srcPoints, canvasContext, 0, identityHomography._triangles, 4);
     addSecondsToTitle((s1-s0)/1000)
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h+amplitude*2);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(dstPoints, canvasContext, w+padBetweenImgs, identityHomography._triangles, 4);}))
 }
@@ -189,7 +189,7 @@ function test6(){
     addSecondsToTitle((s1-s0)/1000)
     // Draw the src points again, as the translation should be virtually lost
     drawPointsInCanvas(squarePoints, canvasContext, 0);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h+50);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(squarePoints, canvasContext, w+padBetweenImgs);}))
 }
@@ -215,7 +215,7 @@ function test7(){
 
     addSecondsToTitle((s1-s0)/1000)
     drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(denormalizePoints(rotatedPoints, w, h), canvasContext, w+padBetweenImgs);}))
 }
@@ -250,7 +250,7 @@ function test8(){
     addSecondsToTitle((s1-s0)/1000)
     // Draw the src points again, as the translation should be virtually lost
     drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w*1.75, h*1.75);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(denormalizePoints(rectanglePoints, w, h), canvasContext, w+padBetweenImgs);}))
 }
@@ -276,8 +276,8 @@ function test9(){
 
     addSecondsToTitle((s1-s0)/1000)
     // Draw the src points again, as the translation should be virtually lost
-    drawPointsInCanvas(squarePoints, canvasContext, 0);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w*2, h+h/5);
+    drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(rectanglePoints, canvasContext, w+padBetweenImgs);}))
 }
@@ -300,14 +300,14 @@ function test10(){
 
     addSecondsToTitle((s1-s0)/1000)
     drawPointsInCanvas(squarePoints, canvasContext, 0);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(squarePoints, canvasContext, w+padBetweenImgs);}))
 }
 function test11(){
     const perspectivePoints = [[0, 0], [0, h], [w, h*2/10], [w, h*8/10]];
     const oppositePerspectivePoints = [[0, h*2/10], [0, h*8/10], [w, 0], [w, h]];
-    let canvasContext = createCanvasContext("Opposite Perspective Transform")
+    let canvasContext = createCanvasContext("Opposite Perspective Transform", w, h+h*2/3);
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
@@ -323,9 +323,9 @@ function test11(){
 
     addSecondsToTitle((s1-s0)/1000)
     drawPointsInCanvas(perspectivePoints, canvasContext, 0);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
-                        /*drawPointsInCanvas(oppositePerspectivePoints, canvasContext, w+padBetweenImgs);*/}))
+                        /*drawPointsInCanvas(denormalizePoints(normalizePoints(oppositePerspectivePoints, w, h), result.width, result.height), canvasContext, w+padBetweenImgs);*/}))
 }
 
 function test12(){
@@ -338,16 +338,15 @@ function test12(){
 
     const identityHomography = new Homography("projective");
     // Sets the width - height from the very beginning, with non normalized coordinates
-    identityHomography.setSourcePoints(squarePoints, null, w/1.5, h/1.5);
+    identityHomography.setSourcePoints(squarePoints, null, w, h);
     // Don't set the image until the warping
     identityHomography.setDstPoints(mirrorPoints);
     const result = identityHomography.warp(testImg);
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
-
     addSecondsToTitle((s1-s0)/1000)
     drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
                         drawPointsInCanvas(denormalizePoints(mirrorPoints, w, h), canvasContext, w+padBetweenImgs-w/8);}))
 }
@@ -417,6 +416,16 @@ function denormalizePoints(points, width = null, height = null){
     let normalizedPoints = [];
     for (let i = 0; i < points.length; i++){
         normalizedPoints.push([points[i][0] * width, points[i][1] * height]);
+    }
+    return normalizedPoints;
+}
+
+function normalizePoints(points, width = null, height = null){
+    width = width === null? w : width;
+    height = height === null? h : height;
+    let normalizedPoints = [];
+    for (let i = 0; i < points.length; i++){
+        normalizedPoints.push([points[i][0] / width, points[i][1] / height]);
     }
     return normalizedPoints;
 }
