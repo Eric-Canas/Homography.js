@@ -65,8 +65,8 @@ class Homography {
         this._objectiveWidth = null;
         this._objectiveHeight = null;
         // Set the source and destiny points to null
-        this._srcPoints = null;
-        this._dstPoints = null;
+        this._srcPoints = null; //Internal type: Float32Array
+        this._dstPoints = null; //Internal type: Float32Array
         // Set the selected transform
         this.firstTransformSelected = transform.toLowerCase();
         this.transform = transform.toLowerCase();
@@ -96,10 +96,6 @@ class Homography {
         // Allocate some auxiliar memory for avoiding to allocate any new memory during the "piecewiseaffine" matrix calculations 
         this._auxSrcTriangle = new Float32Array(3*dims);
         this._auxDstTriangle = new Float32Array(3*dims);
-        this.segmentEquation0_1 = new Float32Array(3);
-        this.segmentEquation0_2 = new Float32Array(3);
-        this.segmentEquation1_2 = new Float32Array(3);
-
     }
 
     /**
@@ -141,7 +137,7 @@ class Homography {
         if(!ArrayBuffer.isView(points)) points = new Float32Array(points.flat())
         // Set the source points property
         this._srcPoints = points;
-        // Check if it is given in normalized coordinates, if this information is not given.
+        // Check if it is given in normalized coordinates (if this information is not given by the user).
         this._srcPointsAreNormalized = pointsAreNormalized === null? !containsValueGreaterThan(this._srcPoints, normalizedMax) : pointsAreNormalized;
 
         // Verifies if the selected transform is coherent with the points array given, or select the best one if 'auto' mode is selected.
@@ -163,7 +159,7 @@ class Homography {
         if (this.transform === 'piecewiseaffine' && this._trianglesCorrespondencesMatrix === null){
             // Unset any previous information about Piecewise Affine auxiliar matrices, as they are not reutilizable when source points are modified.
             this._triangles = null;
-            this._piecewiseMatrices = null
+            this._piecewiseMatrices = null;
             // If there is information for calculating the auxiliar piecewise matrices, calculate them
             if (!this._srcPointsAreNormalized || (this._width > 0 && this._height > 0)){
                 // Set all the parameters that can be already set
@@ -265,7 +261,7 @@ class Homography {
             this._induceBestObjectiveWidthAndHeight();
         }
         
-        // If Piecewise Affine transform were selected and there is enough information, calculate all the auxiliar structures
+        // If Piecewise Affine transform was selected and there is enough information, calculate all the auxiliar structures
         if (this.transform === 'piecewiseaffine' && this._width > 0 && this._height > 0){
             // Transform the points to image coordinates if normalized coordinates were given
             if (this._dstPointsAreNormalized){
@@ -278,9 +274,117 @@ class Homography {
         
     }
 
+    /**
+     * Summary.                     Sets the destiny reference points ([[x1, y1], [x2, y2], ...]) of the transform.
+     * 
+     * Description.                 Apply the calculated homography to the given image. Output image will have enough width and height for enclosing the whole input image without
+     *                              any crop or pad. Any void section of the output image will be transparent. If no image is passed to the function and it was setted before the
+     *                              call of warp (recommended for performance reasons) warps the pre-setted image. In case that an image is given, it will be internally setted,
+     *                              so any future call to warp() receiving no parameters will apply the transformation over this image again (It will be usually useful when the same
+     *                              image is being constantly adapted to, for example, detections coming from a video stream). Remember that it will transform the whole input image
+     *                              for "affine" and "projective" transforms, while for "piecewiseaffine" transforms it will only transform the parts of the image that can be connected
+     *                              through the given source points. It occurs because "piecewiseaffine" transforms define different Affine transforms for different sections of the input
+     *                              image, so it can not calculate transforms for undefined sections. If you want the whole output image in a "piecewiseaffine" transform you should set a
+     *                              source point in each corner of the input image ([[x1, y1], [x2, y2], ..., [0, 0], [0, height], [width, 0], [width, height]]).
+     * 
+     * @param {HTMLImageElement}        [image]  Image that will transformed. If this parameter is not given since image was previously setted through `setImage(img)` or
+     *                                           `setSrcPoints(points, img)`, this previously setted image will be the one that will be warped. If an image is given,
+     *                                           it will be internally setted, so any future call to warp for transforming the same image could avoid to pass this image
+     *                                           parameter again. This reuse of the image, if applicable, would speed up the transformation.
+     * 
+     * @param {Boolean}  [asHTMLPromise = false] If True, returns a Promise of an HTMLImageElement containing the Image, instead of an ImageData buffer. It could be convenient for some
+     *                                           applications, but try to avoid it on critical performance applications as it would decrease its overall performance. If you need to
+     *                                           draw it on a canvas, it can be directly done through context.putImageData(imgData, x, y).
+     * 
+     * @return {ImageData|Promise<HTMLImageElement>}  Transformed image in format ImageData or Promise of an HTMLImageElement if asHTMLPromise was set to true. ImageData buffers can be
+     *                                                directly drawn on canvas by using context.putImageData(imgData, x, y).
+     */
+
+     warp(image = null, asHTMLPromise = false){
+        // If the image was given, sets it internally (It will also recalculate any information that depends of it).
+        if (image !== null){
+            this.setImage(image);
+        } else if (this._image === null){
+            throw("warp() must receive an image if it was not setted before through `setImage(img)` or  `setSrcPoints(points, img)`");
+        }
+        let output_img;
+        // Generate an image by applying the selected transform. If output image is larger than input image, apply the Inverse Transform instead in order to avoid holes in it.
+        switch(this.transform){
+            case 'piecewiseaffine':
+                // If objectiveWidth or objectiveHeight are larger than width or height apply inverse transform, otherwise apply the source to destiny transfrom
+                output_img = (this._objectiveWidth > this._width || this._objectiveHeight > this._height)?
+                                                            this._inversePiecewiseAffineWarp(this._image) : this._piecewiseAffineWarp(this._image);
+                break;
+            case 'affine':
+            case 'projective':
+                // If objectiveWidth or objectiveHeight are larger than width or height apply inverse transform, otherwise apply the source to destiny transfrom 
+                output_img = (this._objectiveWidth > this._width || this._objectiveHeight > this._height)?
+                                                                    this._inverseGeometricWarp(this._image) : this._geometricWarp(this._image);
+                break;
+        }
+        // Transform it from the Uint8ClampedArray flat form (better performance for calculating) to the ImageData form (more conve for the user).
+        output_img = new ImageData(output_img, this._objectiveWidth, this._objectiveHeight);
+        if (asHTMLPromise)
+            return this.HTMLImageElementFromImageData(output_img);
+        else 
+            return output_img;
+    }
+
+    /**
+     * Summary.                     Transforms an Image from its ImageData respresentation to an HTMLImageElement. NOTE: Remember to await for the promise to be resolved
+     *                              (if asPromise is true (default)) or to the "onload" event (if asPromise is false).
+     * 
+     * Description.                 In performance critical applications such as, for example, real-time applications based on videoStreams it should be avoided when
+     *                              possible as this transformation could decrease the overall framerate. Instead, if you need to draw the result image in a canvas,
+     *                              try to do it directly through context.putImageData(imgData, x, y).
+     *                               
+     * 
+     * @param {ImageData}  imgData                            Image to be transformed to an HTMLImageElement.
+     * 
+     * @param {Boolean}    [asPromise = true]                 If true (default), returns a Promise<HTMLImageElement> that ensures that the image is already loaded when resolved.
+     *                                                        If false, directly returns the HTMLImageElement. In this case, the user must take care of not using it before the
+     *                                                        "onload" event is triggered. 
+     *  
+     * @return {HTMLImageElement|Promise<HTMLImageElement>}   HTMLImageElement (or promise of it) containing the Image inside in the imgData buffer. This HTMLImageElement,
+     *                                                        will also have the same width and height than this imgData buffer.
+     */
+
+    HTMLImageElementFromImageData(imgData, asPromise = true){// Obtain a blob: URL for the image data.
+        let previousCanvasWidth = null;
+        if (this._objectiveWidth !== this._hiddenCanvas.width){
+            previousCanvasWidth = this._hiddenCanvas.width;
+            this._hiddenCanvas.width = this._objectiveWidth;
+        }
+        let previousCanvasHeight = null;
+        if (this._objectiveHeight !== this._hiddenCanvas.height){
+            previousCanvasHeight = this._hiddenCanvas.height;
+            this._hiddenCanvas.height = this._objectiveHeight;
+        }
+
+        this._hiddenCanvasContext.clearRect(0, 0, this._objectiveWidth, this._objectiveHeight);
+        this._hiddenCanvasContext.putImageData(imgData, 0, 0);
+        let img = document.createElement('img')
+        img.src = this._hiddenCanvas.toDataURL();
+        img.width = this._objectiveWidth;
+        img.height = this._objectiveHeight;
+        if (previousCanvasWidth !== null) {this._hiddenCanvas.width = previousCanvasWidth;}
+        if (previousCanvasHeight !== null) {this._hiddenCanvas.height = previousCanvasHeight;}
+        //document.body.append(img);
+        if (asPromise){
+            return new Promise((resolve, reject) => {
+                img.onload = () => {resolve(img);};
+                img.onerror = reject;
+            });
+        } else {
+            return img;
+        }
+    }
+
     /* ----------------------------------------------- PRIVATE FUNCTIONS -------------------------------------------------- */
-    /* --------------------------------- These functions should not be used by the user ----------------------------------- */
+    /* ------------------------------ These functions should never be used by the user ------------------------------------ */
     
+    //                              ----------------- Set Widths and Heights ---------------
+
     /**
      * 
      * Summary.                     PRIVATE. AVOID TO USE IT. Sets this._width and this._height properties in a consistent way with the rest of the object. 
@@ -370,6 +474,7 @@ class Homography {
         if (this._hiddenCanvas.height < this._objectiveHeight) {this._hiddenCanvas.height = this._objectiveHeight;}
     }
 
+    //             ----------------- Set Piecewise Affine Transform Parameters ---------------
 
     /**
      * Summary.                     PRIVATE. AVOID TO USE IT. Sets the internal parameters for managing efficiently the piecewise affine transform.
@@ -401,7 +506,7 @@ class Homography {
             if (!this._srcPointsAreNormalized && (this._triangles === null || this._trianglesCorrespondencesMatrix === null)){
                 // Set the maxSrcX and maxSrcY. By the program logic, if it happens it is ensured that it did not happen in setSourcePoints(points) function
                 [this._minSrcX, this._minSrcY, this._maxSrcX, this._maxSrcY] = minmaxXYofArray(this._srcPoints);
-                this._trianglesCorrespondencesMatrix = this.buildTrianglesCorrespondencesMatrix();
+                this._trianglesCorrespondencesMatrix = this._buildTrianglesCorrespondencesMatrix();
             }
             // If destiny points are known (as well as source points), build also the transformation matrices if they did not exist.
             // NOTE that it forces to unset piecewiseMatrices (set as null) when source points or destiny points are modified.
@@ -449,7 +554,74 @@ class Homography {
     }
 
     
+    /**
+     * Summary.                     PRIVATE. AVOID TO USE IT. Builds the auxiliar matrix (this._trianglesCorrespondencesMatrix) that indicates, for each coordinate of the
+     *                              input image, to which triangle of the input Piecewise mesh does it belongs.
+     * 
+     * Description.                 PRIVATE. AVOID TO USE IT. This matrix is extremely relevant for performance reasons and constructing them in a suboptimal way would
+     *                              incredibly harm the overall performance of the Piecewise Affine transforms. For this reason it reutilizes the this._auxSrcTriangle buffer
+     *                              in order to avoid memory allocations. However, it is negligible as the way how _fillTriangle(...) is built is the really critical aspect that
+     *                              determines the validity of the solution in terms of performance.
+     *                              
+     */
+     _buildTrianglesCorrespondencesMatrix(){
+        const matrixLength = (this._maxSrcX-this._minSrcX)*(this._maxSrcY - this._minSrcY);
+        if (this._trianglesCorrespondencesMatrix === null || this._trianglesCorrespondencesMatrix.length !== matrixLength){
+            this._trianglesCorrespondencesMatrix = new Int16Array(matrixLength);
+        }
+        this._trianglesCorrespondencesMatrix.fill(-1);
+        
+        for (const [i, triangle] of Object.entries(this._triangles)){
+            //Set the srcTriangle
+            this._auxSrcTriangle[0] = this._srcPoints[(triangle[0]<<1)]; this._auxSrcTriangle[1] = this._srcPoints[(triangle[0]<<1)+1];
+            this._auxSrcTriangle[2] = this._srcPoints[(triangle[1]<<1)]; this._auxSrcTriangle[3] = this._srcPoints[(triangle[1]<<1)+1];
+            this._auxSrcTriangle[4] = this._srcPoints[(triangle[2]<<1)]; this._auxSrcTriangle[5] = this._srcPoints[(triangle[2]<<1)+1];
+            fillTriangle(this._auxSrcTriangle, i, this._maxSrcX-this._minSrcX, this._minSrcY, this._trianglesCorrespondencesMatrix);
+        }
+        return this._trianglesCorrespondencesMatrix;
+    }
 
+    /**
+     * Summary.                     PRIVATE. AVOID TO USE IT. Destiny to Source version of this._buildTrianglesCorrespondencesMatrix(). It builds the auxiliar matrix
+     *                              (this._trianglesCorrespondencesMatrix) that indicates, for each coordinate of the output image, to which triangle of the output
+     *                              Piecewise mesh does it belongs.
+     * 
+     * Description.                 PRIVATE. AVOID TO USE IT. This matrix is extremely relevant for performance reasons and constructing them in a suboptimal way would
+     *                              incredibly harm the overall performance of the Piecewise Affine transforms. For this reason it reutilizes the this._auxDstTriangle buffer
+     *                              in order to avoid memory allocations. However, it is negligible as the way how _fillTriangle(...) is built is the really critical aspect that
+     *                              determines the validity of the solution in terms of performance.
+     *                              
+     */
+    _buildInverseTrianglesCorrespondencesMatrix(){ 
+        const matrixLength = this._objectiveWidth*this._objectiveHeight;
+        if (this._trianglesCorrespondencesMatrix === null || this._trianglesCorrespondencesMatrix.length !== matrixLength){
+            this._trianglesCorrespondencesMatrix = new Int16Array(matrixLength);
+        }
+        this._trianglesCorrespondencesMatrix.fill(-1);
+
+        for (const [i, triangle] of Object.entries(this._triangles)){
+            //Set the srcTriangle
+            this._auxDstTriangle[0] = this._dstPoints[(triangle[0]<<1)]; this._auxDstTriangle[1] = this._dstPoints[(triangle[0]<<1)+1];
+            this._auxDstTriangle[2] = this._dstPoints[(triangle[1]<<1)]; this._auxDstTriangle[3] = this._dstPoints[(triangle[1]<<1)+1];
+            this._auxDstTriangle[4] = this._dstPoints[(triangle[2]<<1)]; this._auxDstTriangle[5] = this._dstPoints[(triangle[2]<<1)+1];
+            fillTriangle(this._auxDstTriangle, i, this._objectiveWidth, this._yOutputOffset, this._trianglesCorrespondencesMatrix);
+        }
+       return this._trianglesCorrespondencesMatrix;
+    }
+
+    //                        ----------------- Ensure Points Consistency ---------------
+
+    /**
+     * Summary.                     PRIVATE. AVOID TO USE IT. Ensure that source and destiny points are in the same range (normalized or Image range).
+     * 
+     * Description.                 PRIVATE. AVOID TO USE IT. It is extremely importante to ensure that all reference points are in the same range previous
+     *                              to any transformation matrix estimation. When one of both points (source or destiny) must be calculated, this function 
+     *                              prioritizes always the modification of the source points, as it is more usual that when multiple transformations are applied
+     *                              sequentially (usually in video applications) destiny points are the ones that are constantly modified, while source points
+     *                              remain unchanged. This way, future calculations are avoided. However, the affection of this function to the overall performance
+     *                              is negligible.  
+     * 
+     */
     _putSrcAndDstPointsInSameRange(){
         // If they are not in the same range, try to always modify source. 
         // It should avoid future computation as destiny points will usually be given always in the same range. 
@@ -472,82 +644,20 @@ class Homography {
         
     }
 
+    //                        ---------------------- Warps ------------------------
+
     /**
-     * Apply the calculated homography to the given image. If no image is passed to the function and it was setted before the call of warp (recommended
-     * for performance reasons) warps the pre-setted image. In case that image is given it will be internally setted, so any future call to warp() receiving
-     * no parameters will apply the transformation over this image again (It will be usually useful when the same image is being constantly adapted to, for example,
-     * detections coming from a video stream).
+     * Summary.                     PRIVATE. AVOID TO USE IT. Applies the source to destiny Affine or Projective transform.
      * 
-     * @param {HTMLImageElement}  [image]  Image that will transformed. If this parameter is not given since image was previously setted through `setImage(img)` or
-     *                                     `setSrcPoints(points, img)`, this previously setted image will be the one that will be warped. If an image is given,
-     *                                      it will be internally setted, so any future call to warp for transforming the same image could avoid to pass this image
-     *                                      parameter again. This reuse of the image, if applicable, would speed up the transformation.
+     * Description.                 PRIVATE. AVOID TO USE IT. Applies an Affine or Projective transform to the given image. It is by its nature the part of the code
+     *                              where more computation is spent. Any change on this function will have the greatest implications in the performance
      * 
-     * @return {ImageData}        Transformed image in format ImageData. It can be directly drawn in a canvas by using context.putImageData(img, x, y). For converting
-     *                            it to HTMLImageElement you can use HTMLImageElementFromImageData(img) (please note that  HTMLImageElementFromImageData(img) returns
-     *                            a promise).
+     * @param {Uint8ClampedArray}   image     Image to be transformed as Uint8ClampledArray. It will usually be the this._image property.
+     * 
+     * @return {Uint8ClampedArray}  Warped version of the input image. It will have a size of this._objectiveWidth*this.objectiveHeight*4 (RGBA channels).
+     * 
      */
-
-    warp(image = null){
-        if (image !== null){
-            this.setImage(image);
-        } else if (this._image === null){
-            throw("warp() must receive an image if it was not setted before through `setImage(img)` or  `setSrcPoints(points, img)`");
-        }
-        let output_img;
-        switch(this.transform){
-            case 'piecewiseaffine':
-                if (this._objectiveWidth > this._width || this._objectiveHeight > this._height){
-                    output_img = this._inversePiecewiseAffineWarp(this._image);
-                } else {
-                    output_img = this._piecewiseAffineWarp(this._image);
-                }
-                break;
-            case 'affine':
-            case 'projective':
-                if (this._objectiveWidth > this._width || this._objectiveHeight > this._height){
-                    output_img = this._inverseSimpleWarp(this._image);
-                } else {
-                    output_img = this._simpleWarp(this._image);
-                }
-                break;
-        }
-        output_img = new ImageData(output_img, this._objectiveWidth, this._objectiveHeight);
-        return output_img;
-    }
-
-    _piecewiseAffineWarp(image){
-        const srcRowLenght = this._width<<2;
-        const dstRowLenght = this._objectiveWidth<<2;
-        const triangleCorrespondenceMatrixWidth = this._maxSrcX-this._minSrcX;
-        // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
-        let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveHeight);
-        //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
-        for (let y = this._minSrcY; y < this._maxSrcY; y++){
-            for (let x = this._minSrcX; x < this._maxSrcX; x++){
-                const inTriangle = this._trianglesCorrespondencesMatrix[(y-this._minSrcY)*triangleCorrespondenceMatrixWidth+(x-this._minSrcX)]
-                if (inTriangle > -1){
-                    //Get the index of y, x coordinate in the source image ArrayBuffer (<<2 is a faster version of *4)
-                    const idx = (y*srcRowLenght)+(x<<2);
-                    let [newX, newY] = applyAffineTransformToPoint(this._piecewiseMatrices[inTriangle], x, y);
-                    newX = Math.round(newX-this._xOutputOffset); newY = Math.round(newY-this._yOutputOffset);
-                    //Get the index of y, x coordinate in the output image ArrayBuffer (binary shift (<<2) is a faster version of *4)
-                    const newIdx = (newY*dstRowLenght)+(newX<<2);
-                    
-                    output_img[newIdx] = image[idx], output_img[newIdx+1] = image[idx+1],
-                    output_img[newIdx+2] = image[idx+2], output_img[newIdx+3] = image[idx+3]; 
-                // TODO: ERASE IT AFTER DEBUGGING
-                } else {
-                    const newIdx = (y*this._objectiveWidth<<4)+(x<<4);
-                    output_img[newIdx] = 255, output_img[newIdx+1] = 0,
-                    output_img[newIdx+2] = 0, output_img[newIdx+3] = 255; 
-                }
-            }    
-        }    
-        return output_img;
-    }
-
-    _simpleWarp(image){
+    _geometricWarp(image){
         const srcRowLenght = this._width<<2;
         const dstRowLenght = this._objectiveWidth<<2;
         let transformPoint = getTransformFunction(this.transform);
@@ -570,40 +680,60 @@ class Homography {
         return output_img;
     }
 
-    _inversePiecewiseAffineWarp(image){
-        
+    /**
+     * Summary.                     PRIVATE. AVOID TO USE IT. Applies the source to destiny Piecewise Affine transform.
+     * 
+     * Description.                 PRIVATE. AVOID TO USE IT. Applies a Piecewise Affine transform to the given image. It is by its nature the part of the code
+     *                              where more computation is spent. Any change on this function will have the greatest implications in the performance. This function
+     *                              needs the Piecewise Affine parameters to be set. They are: The triangulation, the trianglesCorrespondencesMatrix, and the Affine
+     *                              transformations matrices of each triangle. 
+     * 
+     * @param {Uint8ClampedArray}   image     Image to be transformed as Uint8ClampledArray. It will usually be the this._image property.
+     * 
+     * @return {Uint8ClampedArray}  Warped version of the input image. It will have a size of this._objectiveWidth*this.objectiveHeight*4 (RGBA channels).
+     * 
+     */
+
+    _piecewiseAffineWarp(image){
         const srcRowLenght = this._width<<2;
         const dstRowLenght = this._objectiveWidth<<2;
-        const inverseTriangleCorrespondenceMatrix = this.buildInverseTrianglesCorrespondencesMatrix();
-        const s0 = performance.now();   
-        const triangleCorrespondenceMatrixWidth = this._objectiveWidth-this._xOutputOffset;
-        let inversePiecewiseMatrices = []
-        for (let i=0; i<this._piecewiseMatrices.length; i++){
-            inversePiecewiseMatrices.push(inverseAffineMatrix(this._piecewiseMatrices[i]));
-        }
+        const triangleCorrespondenceMatrixWidth = this._maxSrcX-this._minSrcX;
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
         let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveHeight);
-       
-        for (let y = this._yOutputOffset; y < this._objectiveHeight+this._yOutputOffset; y++){
-            for (let x = this._xOutputOffset; x < this._objectiveWidth+this._xOutputOffset; x++){
-                const inTriangle = inverseTriangleCorrespondenceMatrix[(y-this._yOutputOffset)*triangleCorrespondenceMatrixWidth+(x-this._xOutputOffset)]
-                if (inTriangle >= 0){
-                    let [srcX, srcY] = applyAffineTransformToPoint(inversePiecewiseMatrices[inTriangle], x, y);
-                    if (srcX >= 0 && srcX < this._width && srcY >= 0 && srcY < this._height){
-                        srcX = Math.round(srcX); srcY = Math.round(srcY);
-                        const srcIdx = (srcY*srcRowLenght)+(srcX<<2);
-                        const dstIdx = ((y-this._yOutputOffset)*dstRowLenght)+((x-this._xOutputOffset)<<2);
-                        output_img[dstIdx] = image[srcIdx], output_img[dstIdx+1] = image[srcIdx+1],
-                        output_img[dstIdx+2] = image[srcIdx+2], output_img[dstIdx+3] = image[srcIdx+3];
-                    }
+        //We only check the points that can be inside a tringle, as the rest of points will not be translated in a piecewise warping.
+        for (let y = this._minSrcY; y < this._maxSrcY; y++){
+            for (let x = this._minSrcX; x < this._maxSrcX; x++){
+                const inTriangle = this._trianglesCorrespondencesMatrix[(y-this._minSrcY)*triangleCorrespondenceMatrixWidth+(x-this._minSrcX)]
+                if (inTriangle > -1){
+                    //Get the index of y, x coordinate in the source image ArrayBuffer (<<2 is a faster version of *4)
+                    const idx = (y*srcRowLenght)+(x<<2);
+                    let [newX, newY] = applyAffineTransformToPoint(this._piecewiseMatrices[inTriangle], x, y);
+                    newX = Math.round(newX-this._xOutputOffset); newY = Math.round(newY-this._yOutputOffset);
+                    //Get the index of y, x coordinate in the output image ArrayBuffer (binary shift (<<2) is a faster version of *4)
+                    const newIdx = (newY*dstRowLenght)+(newX<<2);
+                    
+                    output_img[newIdx] = image[idx], output_img[newIdx+1] = image[idx+1],
+                    output_img[newIdx+2] = image[idx+2], output_img[newIdx+3] = image[idx+3]; 
                 }
             }    
         }    
-        console.log(`Inverse Bucle Performance: ${(performance.now()-s0)/1000} seconds`);
         return output_img;
     }
 
-    _inverseSimpleWarp(image){
+    /**
+     * Summary.                     PRIVATE. AVOID TO USE IT. Destiny to source version of _geometricWarp(image).
+     * 
+     * Description.                 PRIVATE. AVOID TO USE IT. Applies an inverse Affine or Projective transform to the given image. This version have worse performance than
+     *                              than its forward version (_geometricWarp(image)), so it should be used only when this lose of performance is compensated. It is, when 
+     *                              output image is larger, so the Source to Destiny version would generate a sparse image, or when output image is shorter enough in comparison
+     *                              to the input image and therefore the additional overhead would be compensated by the lower amount of points to be calculated.  
+     * 
+     * @param {Uint8ClampedArray}   image     Image to be transformed as Uint8ClampledArray. It will usually be the this._image property.
+     * 
+     * @return {Uint8ClampedArray}  Warped version of the input image. It will have a size of this._objectiveWidth*this.objectiveHeight*4 (RGBA channels).
+     * 
+     */
+     _inverseGeometricWarp(image){
         const srcRowLenght = this._width<<2;
         const dstRowLenght = this._objectiveWidth<<2;
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
@@ -631,41 +761,64 @@ class Homography {
         return output_img;
     }
 
-     
-    buildTrianglesCorrespondencesMatrix(){
-        const matrixLength = (this._maxSrcX-this._minSrcX)*(this._maxSrcY - this._minSrcY);
-        if (this._trianglesCorrespondencesMatrix === null || this._trianglesCorrespondencesMatrix.length !== matrixLength){
-            this._trianglesCorrespondencesMatrix = new Int16Array(matrixLength);
-        }
-        this._trianglesCorrespondencesMatrix.fill(-1);
+    /**
+     * Summary.                     PRIVATE. AVOID TO USE IT. Destiny to source version of _piecewiseAffinecWarp(image).
+     * 
+     * Description.                 PRIVATE. AVOID TO USE IT. Applies an inverse piecewise transform to the given image. This version have worse performance than
+     *                              than its forward version (_piecewiseAffineWarp(image)), so it should be used only when this lose of performance is compensated. It is, when 
+     *                              output image is larger, so the Source to Destiny version would generate a sparse image, or when output image is shorter enough in comparison
+     *                              to the input image and therefore the additional overhead of generating the parameters again as inverting the Affine matrices of each triangle
+     *                              would be compensated by the lower amount of points to be calculated.  
+     * 
+     * @param {Uint8ClampedArray}   image     Image to be transformed as Uint8ClampledArray. It will usually be the this._image property.
+     * 
+     * @return {Uint8ClampedArray}  Warped version of the input image. It will have a size of this._objectiveWidth*this.objectiveHeight*4 (RGBA channels).
+     * 
+     */
+    _inversePiecewiseAffineWarp(image){
         
-        for (const [i, triangle] of Object.entries(this._triangles)){
-            //Set the srcTriangle
-            this._auxSrcTriangle[0] = this._srcPoints[(triangle[0]<<1)]; this._auxSrcTriangle[1] = this._srcPoints[(triangle[0]<<1)+1];
-            this._auxSrcTriangle[2] = this._srcPoints[(triangle[1]<<1)]; this._auxSrcTriangle[3] = this._srcPoints[(triangle[1]<<1)+1];
-            this._auxSrcTriangle[4] = this._srcPoints[(triangle[2]<<1)]; this._auxSrcTriangle[5] = this._srcPoints[(triangle[2]<<1)+1];
-            fillTriangle(this._auxSrcTriangle, i, this._maxSrcX-this._minSrcX, this._minSrcY, this._trianglesCorrespondencesMatrix);
+        const srcRowLenght = this._width<<2;
+        const dstRowLenght = this._objectiveWidth<<2;
+        const inverseTriangleCorrespondenceMatrix = this._buildInverseTrianglesCorrespondencesMatrix();
+        const s0 = performance.now();   
+        const triangleCorrespondenceMatrixWidth = this._objectiveWidth-this._xOutputOffset;
+        let inversePiecewiseMatrices = []
+        for (let i=0; i<this._piecewiseMatrices.length; i++){
+            inversePiecewiseMatrices.push(inverseAffineMatrix(this._piecewiseMatrices[i]));
         }
-        return this._trianglesCorrespondencesMatrix;
+        // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
+        let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveHeight);
+       
+        for (let y = this._yOutputOffset; y < this._objectiveHeight+this._yOutputOffset; y++){
+            for (let x = this._xOutputOffset; x < this._objectiveWidth+this._xOutputOffset; x++){
+                const inTriangle = inverseTriangleCorrespondenceMatrix[(y-this._yOutputOffset)*triangleCorrespondenceMatrixWidth+(x-this._xOutputOffset)]
+                if (inTriangle >= 0){
+                    let [srcX, srcY] = applyAffineTransformToPoint(inversePiecewiseMatrices[inTriangle], x, y);
+                    if (srcX >= 0 && srcX < this._width && srcY >= 0 && srcY < this._height){
+                        srcX = Math.round(srcX); srcY = Math.round(srcY);
+                        const srcIdx = (srcY*srcRowLenght)+(srcX<<2);
+                        const dstIdx = ((y-this._yOutputOffset)*dstRowLenght)+((x-this._xOutputOffset)<<2);
+                        output_img[dstIdx] = image[srcIdx], output_img[dstIdx+1] = image[srcIdx+1],
+                        output_img[dstIdx+2] = image[srcIdx+2], output_img[dstIdx+3] = image[srcIdx+3];
+                    }
+                }
+            }    
+        }    
+        console.log(`Inverse Bucle Performance: ${(performance.now()-s0)/1000} seconds`);
+        return output_img;
     }
-
-    buildInverseTrianglesCorrespondencesMatrix(){ 
-        const matrixLength = this._objectiveWidth*this._objectiveHeight;
-        if (this._trianglesCorrespondencesMatrix === null || this._trianglesCorrespondencesMatrix.length !== matrixLength){
-            this._trianglesCorrespondencesMatrix = new Int16Array(matrixLength);
-        }
-        this._trianglesCorrespondencesMatrix.fill(-1);
-
-        for (const [i, triangle] of Object.entries(this._triangles)){
-            //Set the srcTriangle
-            this._auxDstTriangle[0] = this._dstPoints[(triangle[0]<<1)]; this._auxDstTriangle[1] = this._dstPoints[(triangle[0]<<1)+1];
-            this._auxDstTriangle[2] = this._dstPoints[(triangle[1]<<1)]; this._auxDstTriangle[3] = this._dstPoints[(triangle[1]<<1)+1];
-            this._auxDstTriangle[4] = this._dstPoints[(triangle[2]<<1)]; this._auxDstTriangle[5] = this._dstPoints[(triangle[2]<<1)+1];
-            fillTriangle(this._auxDstTriangle, i, this._objectiveWidth, this._yOutputOffset, this._trianglesCorrespondencesMatrix);
-        }
-       return this._trianglesCorrespondencesMatrix;
-    }
-
+    
+    /**
+     * Summary.                     PRIVATE. AVOID TO USE IT. Transforms an HTMLImageElement in a flat Uint8ClampedArray of size this._width*this._height*4 (RGBA channels)
+     * 
+     * Description.                 PRIVATE. AVOID TO USE IT. In the process, the image is resized if this._width or this._height differs from the original image.width or
+     *                              image.height.
+     * 
+     * @param {HTMLImageElement}    image  Image to be converted to Uint8ClampedArray flat format.
+     * 
+     * @return {Uint8ClampedArray}  Uint8ClampedArray of size this._width*this._height*4 (RGBA channels) containing the image.
+     * 
+     */
     _getImageAsRGBAArray(image){
         this._hiddenCanvasContext.clearRect(0, 0, this._width, this._height);
         this._hiddenCanvasContext.drawImage(image, 0, 0, this._width, this._height); //image.width, image.height);
@@ -673,43 +826,28 @@ class Homography {
         return imageRGBA.data;
     }
     
-    async HTMLImageElementFromImageData(imgData, asPromise = true){// Obtain a blob: URL for the image data.
-        let previousCanvasWidth = null;
-        if (this._objectiveWidth !== this._hiddenCanvas.width){
-            previousCanvasWidth = this._hiddenCanvas.width;
-            this._hiddenCanvas.width = this._objectiveWidth;
-        }
-        let previousCanvasHeight = null;
-        if (this._objectiveHeight !== this._hiddenCanvas.height){
-            previousCanvasHeight = this._hiddenCanvas.height;
-            this._hiddenCanvas.height = this._objectiveHeight;
-        }
-
-        this._hiddenCanvasContext.clearRect(0, 0, this._objectiveWidth, this._objectiveHeight);
-        this._hiddenCanvasContext.putImageData(imgData, 0, 0);
-        let img = document.createElement('img')
-        img.src = this._hiddenCanvas.toDataURL();
-        img.width = this._objectiveWidth;
-        img.height = this._objectiveHeight;
-        if (previousCanvasWidth !== null) {this._hiddenCanvas.width = previousCanvasWidth;}
-        if (previousCanvasHeight !== null) {this._hiddenCanvas.height = previousCanvasHeight;}
-        //document.body.append(img);
-        
-        if (asPromise){
-            return new Promise((resolve, reject) => {
-                img.onload = () => resolve(img);
-                img.onerror = reject;
-            });
-        } else {
-            return img;
-        }
-    }
-    
 
 }
 export {Homography}
 
+/*      ----------------------------------------------- AUXILIAR FUNCTIONS ---------------------------------------------------                   */
+/*      ---------------------------- These functions will be not accessible for the user -------------------------------------                   */
 
+//      ----------------------------------- To fill Piecewise Correspondence Matrix ------------------------------------------
+/**
+ * Summary.                     PRIVATE AUXILIAR. Fills all the coordinates of the given "trianglesCorrespondencesMatrix" that belongs to the given "triangle" with the
+ *                              value of "idx".
+ * 
+ * Description.                 PRIVATE AUXILIAR. This function is critical for the performance of PiecewiseAffine Transforms. In order to be as fast as possible, it divides
+ *                              the triangle in its three segments, and solves the equation of the line (y = mx + b) for each one of them. Then, for each row (y) of the matrix,
+ *                              solves these equations for x (x = (y-b)/m). Then, as the triangle is the unique polygon that is always convex, fills the subsection of the y^{th}
+ *                              row comprised between the minimum and the maximum x solutions.
+ * 
+ * @param {ArrayBuffer}        triangle  Three points of the triangle, represented as an ArrayBuffer of length 6 ([x1, y1, x2, y2, x3, y3]);
+ * 
+ * @return {Uint8ClampedArray}  Uint8ClampedArray of size this._width*this._height*4 (RGBA channels) containing the image.
+ * 
+ */
 function fillTriangle(triangle, idx, matrix_width, yOffset, trianglesCorrespondencesMatrix){
     const minY = ~~Math.min(triangle[1], triangle[3], triangle[5]);
     const maxY = Math.ceil(Math.max(triangle[1], triangle[3], triangle[5]));
@@ -952,27 +1090,6 @@ function applyProjectiveTransformToPoint(matrix, x, y){
             (matrix[3]*x + matrix[4]*y + matrix[5]) / (matrix[6]*x + matrix[7]*y + 1)]; //y
 }
 
-//This code is slightly adapted from (https://github.com/mattdesl/point-in-triangle [http://www.blackpawn.com/texts/pointinpoly/])
-function pointInTriangle(x, y, triangle) {
-
-    //compute vectors & dot products
-    const v0x = triangle[4]-triangle[0], v0y = triangle[5]-triangle[1],
-        v1x = triangle[2]-triangle[0], v1y = triangle[3]-triangle[1],
-        v2x = x-triangle[0], v2y = y-triangle[1],
-        dot00 = v0x*v0x + v0y*v0y,
-        dot01 = v0x*v1x + v0y*v1y,
-        dot02 = v0x*v2x + v0y*v2y,
-        dot11 = v1x*v1x + v1y*v1y,
-        dot12 = v1x*v2x + v1y*v2y
-
-    // Compute barycentric coordinates
-    const b = (dot00 * dot11 - dot01 * dot01),
-        inv = b === 0 ? 0 : (1 / b),
-        u = (dot11*dot02 - dot01*dot12) * inv,
-        v = (dot00*dot12 - dot01*dot02) * inv
-    return u>=0 && v>=0 && (u+v < 1)
-}
-
 function projectiveMatrixFromSquares(srcSquare, dstSquare){
     /**
      * Gets the 4x2 transform matrix from two squares, got as TypedArray of positions (for performance reasons)
@@ -999,11 +1116,6 @@ function projectiveMatrixFromSquares(srcSquare, dstSquare){
 
 }
 
-function minAndMaxYOfTriangle(triangle){
-    const y = Math.min(triangle[1], triangle[3], triangle[5]);
-    const height =  Math.max(triangle[1], triangle[3], triangle[5]);
-    return [~~y, Math.ceil(height)];
-}
 
 function containsValueGreaterThan(iterable, value){
     for (let i=0; i<iterable.length; i++){
