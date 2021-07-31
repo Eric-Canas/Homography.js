@@ -498,7 +498,6 @@ class Homography {
         switch(this.transform){
             case 'piecewiseaffine':
                 if (this._objectiveWidth > this._width || this._objectiveHeight > this._height){
-                    //TODO: Build a better method for the inverse piecewise transform
                     output_img = this._inversePiecewiseAffineWarp(this._image);
                 } else {
                     output_img = this._piecewiseAffineWarp(this._image);
@@ -572,9 +571,11 @@ class Homography {
     }
 
     _inversePiecewiseAffineWarp(image){
+        
         const srcRowLenght = this._width<<2;
         const dstRowLenght = this._objectiveWidth<<2;
         const inverseTriangleCorrespondenceMatrix = this.buildInverseTrianglesCorrespondencesMatrix();
+        const s0 = performance.now();   
         const triangleCorrespondenceMatrixWidth = this._objectiveWidth-this._xOutputOffset;
         let inversePiecewiseMatrices = []
         for (let i=0; i<this._piecewiseMatrices.length; i++){
@@ -582,7 +583,7 @@ class Homography {
         }
         // output_img starts as a fully transparent image (the whole alpha channel is filled with 0).
         let output_img = new Uint8ClampedArray(dstRowLenght*this._objectiveHeight);
-        
+       
         for (let y = this._yOutputOffset; y < this._objectiveHeight+this._yOutputOffset; y++){
             for (let x = this._xOutputOffset; x < this._objectiveWidth+this._xOutputOffset; x++){
                 const inTriangle = inverseTriangleCorrespondenceMatrix[(y-this._yOutputOffset)*triangleCorrespondenceMatrixWidth+(x-this._xOutputOffset)]
@@ -598,6 +599,7 @@ class Homography {
                 }
             }    
         }    
+        console.log(`Inverse Bucle Performance: ${(performance.now()-s0)/1000} seconds`);
         return output_img;
     }
 
@@ -618,10 +620,8 @@ class Homography {
                     if (srcX >= 0 && srcX < this._width && srcY >= 0 && srcY < this._height){
                         //Get the index in the destiny domain
                         const idx = ((y-this._yOutputOffset)*dstRowLenght)+((x-this._xOutputOffset)<<2);
-                        //Get the index in the source domain
-                        srcX = Math.round(srcX); srcY = Math.round(srcY);
                         //Get the index of y, x coordinate in the output image ArrayBuffer
-                        const srcIdx = (srcY*srcRowLenght)+(srcX<<2);
+                        const srcIdx = (Math.round(srcY)*srcRowLenght)+(Math.round(srcX)<<2);
                         output_img[idx] = image[srcIdx], output_img[idx+1] = image[srcIdx+1],
                         output_img[idx+2] = image[srcIdx+2], output_img[idx+3] = image[srcIdx+3];
                     }
@@ -633,31 +633,36 @@ class Homography {
 
      
     buildTrianglesCorrespondencesMatrix(){
-        this._trianglesCorrespondencesMatrix = new Int16Array((this._maxSrcX-this._minSrcX)*(this._maxSrcY - this._minSrcY)).fill(-1);
-        const s0 = performance.now();
+        const matrixLength = (this._maxSrcX-this._minSrcX)*(this._maxSrcY - this._minSrcY);
+        if (this._trianglesCorrespondencesMatrix === null || this._trianglesCorrespondencesMatrix.length !== matrixLength){
+            this._trianglesCorrespondencesMatrix = new Int16Array(matrixLength);
+        }
+        this._trianglesCorrespondencesMatrix.fill(-1);
+        
         for (const [i, triangle] of Object.entries(this._triangles)){
             //Set the srcTriangle
-            this._auxSrcTriangle[0] = this._srcPoints[triangle[0]*dims]; this._auxSrcTriangle[1] = this._srcPoints[triangle[0]*dims+1];
-            this._auxSrcTriangle[2] = this._srcPoints[triangle[1]*dims]; this._auxSrcTriangle[3] = this._srcPoints[triangle[1]*dims+1];
-            this._auxSrcTriangle[4] = this._srcPoints[triangle[2]*dims]; this._auxSrcTriangle[5] = this._srcPoints[triangle[2]*dims+1];
-            fillByCircumscribedRectangle(this._auxSrcTriangle, i, this._maxSrcX-this._minSrcX, this._minSrcX, this._minSrcX, this._trianglesCorrespondencesMatrix);
+            this._auxSrcTriangle[0] = this._srcPoints[(triangle[0]<<1)]; this._auxSrcTriangle[1] = this._srcPoints[(triangle[0]<<1)+1];
+            this._auxSrcTriangle[2] = this._srcPoints[(triangle[1]<<1)]; this._auxSrcTriangle[3] = this._srcPoints[(triangle[1]<<1)+1];
+            this._auxSrcTriangle[4] = this._srcPoints[(triangle[2]<<1)]; this._auxSrcTriangle[5] = this._srcPoints[(triangle[2]<<1)+1];
+            fillTriangle(this._auxSrcTriangle, i, this._maxSrcX-this._minSrcX, this._minSrcY, this._trianglesCorrespondencesMatrix);
         }
-        console.log(`${(performance.now()-s0)/1000} seconds to fill matrix`)
-       return this._trianglesCorrespondencesMatrix;
+        return this._trianglesCorrespondencesMatrix;
     }
 
     buildInverseTrianglesCorrespondencesMatrix(){ 
-        this._trianglesCorrespondencesMatrix = new Int16Array((this._objectiveWidth)*(this._objectiveHeight)).fill(-1);
-        const s0 = performance.now();
+        const matrixLength = this._objectiveWidth*this._objectiveHeight;
+        if (this._trianglesCorrespondencesMatrix === null || this._trianglesCorrespondencesMatrix.length !== matrixLength){
+            this._trianglesCorrespondencesMatrix = new Int16Array(matrixLength);
+        }
+        this._trianglesCorrespondencesMatrix.fill(-1);
+
         for (const [i, triangle] of Object.entries(this._triangles)){
             //Set the srcTriangle
-            this._auxDstTriangle[0] = this._dstPoints[triangle[0]*dims]; this._auxDstTriangle[1] = this._dstPoints[triangle[0]*dims+1];
-            this._auxDstTriangle[2] = this._dstPoints[triangle[1]*dims]; this._auxDstTriangle[3] = this._dstPoints[triangle[1]*dims+1];
-            this._auxDstTriangle[4] = this._dstPoints[triangle[2]*dims]; this._auxDstTriangle[5] = this._dstPoints[triangle[2]*dims+1];
-            //this.fillInverseByCircumscribedRectangle(this._auxDstTriangle, i, this._objectiveWidth, this._xOutputOffset, this._yOutputOffset, this._trianglesCorrespondencesMatrix);
-            fillByCircumscribedRectangle(this._auxDstTriangle, i, this._objectiveWidth, this._xOutputOffset, this._yOutputOffset, this._trianglesCorrespondencesMatrix);
+            this._auxDstTriangle[0] = this._dstPoints[(triangle[0]<<1)]; this._auxDstTriangle[1] = this._dstPoints[(triangle[0]<<1)+1];
+            this._auxDstTriangle[2] = this._dstPoints[(triangle[1]<<1)]; this._auxDstTriangle[3] = this._dstPoints[(triangle[1]<<1)+1];
+            this._auxDstTriangle[4] = this._dstPoints[(triangle[2]<<1)]; this._auxDstTriangle[5] = this._dstPoints[(triangle[2]<<1)+1];
+            fillTriangle(this._auxDstTriangle, i, this._objectiveWidth, this._yOutputOffset, this._trianglesCorrespondencesMatrix);
         }
-        console.log(`${(performance.now()-s0)/1000} seconds to fill matrix (Inverse)`)
        return this._trianglesCorrespondencesMatrix;
     }
 
@@ -705,14 +710,14 @@ class Homography {
 export {Homography}
 
 
-function fillByCircumscribedRectangle(triangle, idx, matrix_width, xOffset, yOffset, trianglesCorrespondencesMatrix){
-    const rectangle = rectangleCircunscribingTriangle(triangle);
+function fillTriangle(triangle, idx, matrix_width, yOffset, trianglesCorrespondencesMatrix){
+    const minY = ~~Math.min(triangle[1], triangle[3], triangle[5]);
+    const maxY = Math.ceil(Math.max(triangle[1], triangle[3], triangle[5]));
     //Set the the width to manage the offset of the matrix
     const trianglesCorrespondencesMatrixWidth = matrix_width;
     let xOrigin, xDestiny;
     const segments = defineTriangleSegments(triangle);
-    
-    for (let y = rectangle.y; y < rectangle.y+rectangle.height; y++){
+    for (let y = minY; y < maxY; y++){
         [xOrigin, xDestiny] = predictXLimits(segments, y);
         trianglesCorrespondencesMatrix.fill(idx, (y-yOffset)*trianglesCorrespondencesMatrixWidth + xOrigin, (y-yOffset)*trianglesCorrespondencesMatrixWidth + xDestiny);
         
@@ -994,12 +999,10 @@ function projectiveMatrixFromSquares(srcSquare, dstSquare){
 
 }
 
-function rectangleCircunscribingTriangle(triangle){
-    const x = Math.min(triangle[0], triangle[2], triangle[4]);
+function minAndMaxYOfTriangle(triangle){
     const y = Math.min(triangle[1], triangle[3], triangle[5]);
-    const width = Math.max(triangle[0], triangle[2], triangle[4])-x;
-    const height =  Math.max(triangle[1], triangle[3], triangle[5])-y;
-    return {x : Math.floor(x), y : Math.floor(y), width : Math.ceil(width), height : Math.ceil(height)};
+    const height =  Math.max(triangle[1], triangle[3], triangle[5]);
+    return [~~y, Math.ceil(height)];
 }
 
 function containsValueGreaterThan(iterable, value){
