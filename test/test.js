@@ -10,11 +10,11 @@ testImg.onload = () => runTests();
 
 function runTests(){
     addTitle("PieceWise Affine Transforms")
-    test1();
+    test111();
     test2();
     test3();
     test4();
-    //test5();
+    test5();
 
     addTitle("Affine Transforms");
     test6();
@@ -33,7 +33,8 @@ function runTests(){
  */
 function test1(){
     const squarePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
-    let canvasContext = createCanvasContext("Identity Transform")
+    const squarePointsShifted = [[0+0.2, 0+0.4], [0+0.2, 2+0.4], [2+0.2, 0+0.4], [2+0.2, 2+0.4]];
+    let canvasContext = createCanvasContext("Shift (phantom) and Upsample Transform (Most expensive opperation)", w*2, h*2)
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
@@ -44,14 +45,40 @@ function test1(){
     // Don't set the image until the warping
     identityHomography.setDstPoints(squarePoints);
     const result = identityHomography.warp(testImg);
+    console.log(result)
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
     const s1 = performance.now();
 
     addSecondsToTitle((s1-s0)/1000)
     drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0, identityHomography._triangles);
-    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, w, h);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
-                        drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
+                        drawPointsInCanvas(denormalizePoints(squarePoints, w*2, h*2), canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
+}
+
+function test111(){
+    const squarePoints = [[0, 0], [0, 0.5], [0.5, 0], [0.5, 0.5], [0.5, 1], [1, 0.5], [1, 1], [0, 1], [1, 0]];
+    const squarePointsShifted = [[0, 0], [0, 1], [1, 0], [1, 1], [1, 2], [2, 1], [2, 2], [0, 2], [2, 0]];;
+    let canvasContext = createCanvasContext("Shift (phantom) and Upsample Transform (Most expensive opperation)", w*2, h*2)
+    canvasContext.drawImage(testImg, 0, 0, w, h);
+    canvasContext.fill();
+    const s0 = performance.now();
+
+    const identityHomography = new Homography("piecewiseaffine");
+    // Sets the width - height from the very beginning, with non normalized coordinates
+    identityHomography.setSourcePoints(squarePoints);
+    // Don't set the image until the warping
+    identityHomography.setDstPoints(squarePointsShifted);
+    const result = identityHomography.warp(testImg);
+    console.log(result)
+    const img = identityHomography.HTMLImageElementFromImageData(result, false);
+    const s1 = performance.now();
+
+    addSecondsToTitle((s1-s0)/1000)
+    drawPointsInCanvas(denormalizePoints(squarePoints, w, h), canvasContext, 0, identityHomography._triangles);
+    img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
+                        canvasContext.fill();
+                        drawPointsInCanvas(denormalizePoints(squarePoints, w*2, h*2), canvasContext, w+padBetweenImgs, identityHomography._triangles);}))
 }
 
 function test2(){
@@ -155,7 +182,7 @@ function test5(){
     // And sets the image togheter with
     identityHomography.setSourcePoints(srcPoints);
     // Don't set any width or height in any moment
-    identityHomography.setDstPoints(dstPoints, w, h+amplitude*2);
+    identityHomography.setDstPoints(dstPoints);
     // Call the warping without any image
     const result = identityHomography.warp(testImg);
     const img = identityHomography.HTMLImageElementFromImageData(result, false);
