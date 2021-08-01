@@ -2,10 +2,20 @@
 import Delaunator from 'https://cdn.skypack.dev/delaunator@5.0.0';
 
 const availableTransforms = ['auto', 'piecewiseaffine', 'affine', 'projective'];
-
+const maxCSSDecimal = 5;
 /**
+ * Available types of transforms
  * @typedef {"auto"|"affine"|"piecewiseaffine"|"projective"} Transform
 */
+
+/**
+ * Equations of the line of each segment of a Triangle
+ * @typedef {Object}    LineEquations
+ * @property {Number}                   m       m parameter of the equation (y = mx+ b).
+ * @property {Number}                   b       b parameter of the equation (y = mx+ b).
+ * @property {Number}                   minY    Minimum value of y within the segment.
+ * @property {Number}                   maxY    Maximum value of y within the segment. 
+ */
 
 const dims = 2;
 // Max allowed width/height in normalized coordinates (just for allowing resizes up to x8)
@@ -106,7 +116,7 @@ class Homography {
      *                              the correspondent destiny points coordinates (setted through setDstPoints()) in the output image. The rest
      *                              of coordinates of the image will be interpolated through the geometrical transform estimated f these ones.
      * 
-     * @param {ArrayBuffer | Array}  points      Source points of the transform, given as a BufferArray or Array in the form [x1, y1, x2, y2...]
+     * @param {ArrayBuffer | Array}  points      Source points of the transform, given as a ArrayBuffer or Array in the form [x1, y1, x2, y2...]
      *                                           or [[x1, y1], [x2, y2]...]. These source points should be declared in image coordinates, (x : [0, width],
      *                                           y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]). To allow rescalings (from x0 to x8),
      *                                           normalized scale is automatically detected when the points array does not contain any value larger than 8.0.
@@ -235,7 +245,7 @@ class Homography {
      *                                           automatically inferred from the points array.
      * 
      */
-     setDstPoints(points, pointsAreNormalized = null){
+     setDestinyPoints(points, pointsAreNormalized = null){
         // Transform it to a typed array for perfomance reasons
         if(!ArrayBuffer.isView(points)) points = new Float32Array(points.flat());
         // Verify that these points matches with the source points
@@ -312,14 +322,18 @@ class Homography {
         switch(this.transform){
             case 'piecewiseaffine':
                 // If objectiveWidth or objectiveHeight are larger than width or height apply inverse transform, otherwise apply the source to destiny transfrom
-                output_img = (this._objectiveWidth > this._width || this._objectiveHeight > this._height)?
+                // Apply also the inverse transform in the reduction case, when the width/height difference is great enough for compensating the overhead of inverse transform
+                output_img = (this._objectiveWidth > this._width || this._objectiveHeight > this._height || this._objectiveWidth*1.2 < this._width || this._objectiveHeight*1.2 < this._height)?
                                                             this._inversePiecewiseAffineWarp(this._image) : this._piecewiseAffineWarp(this._image);
                 break;
             case 'affine':
-            case 'projective':
                 // If objectiveWidth or objectiveHeight are larger than width or height apply inverse transform, otherwise apply the source to destiny transfrom 
-                output_img = (this._objectiveWidth > this._width || this._objectiveHeight > this._height)?
+                output_img = (this._objectiveWidth !== this._width || this._objectiveHeight !== this._height)?
                                                                     this._inverseGeometricWarp(this._image) : this._geometricWarp(this._image);
+                break;
+            case 'projective':
+                //Force inverse, as otherwise projective would produce sparse parts on the image by the perspective properties
+                output_img = this._inverseGeometricWarp(this._image);
                 break;
         }
         // Transform it from the Uint8ClampedArray flat form (better performance for calculating) to the ImageData form (more conve for the user).
@@ -349,7 +363,8 @@ class Homography {
      *                                                        will also have the same width and height than this imgData buffer.
      */
 
-    HTMLImageElementFromImageData(imgData, asPromise = true){// Obtain a blob: URL for the image data.
+    HTMLImageElementFromImageData(imgData, asPromise = true)
+    {
         let previousCanvasWidth = null;
         if (this._objectiveWidth !== this._hiddenCanvas.width){
             previousCanvasWidth = this._hiddenCanvas.width;
@@ -379,6 +394,69 @@ class Homography {
             return img;
         }
     }
+
+    /**
+     * Summary.                     Get the current Affine or Projective transform as a string that can be directly applied in CSS. If new Source and/or Destiny Points
+     *                              are given uses them instead for calculating a new transform.
+     * 
+     * Description.                 Affine and Projective transforms can be applied on each element that accepts the 'transform' CSS property. You can apply this transformation
+     *                              to an element just by executing `<your_element>.style.transform = getTransformationMatrixAsCSS();`. Take into account, that this function will
+     *                              not work if transformation selected was "piecewiseaffine" as CSS does not accept Piecewise Affine transforms.
+     * 
+     * @param {ArrayBuffer|Array}   [srcPoints]  Optional source points for a new transform, given as a ArrayBuffer or Array in the form [x1, y1, x2, y2, ...]
+     *                                           or [[x1, y1], [x2, y2], ...]. These source points should be declared in pixels coordinates, (x : [0, width],
+     *                                           y : [0, height]) or (preferably for simplicity) in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]).
+     *                                           If no points are given, they should have been setted before through `setSrcPoints(points)`. Remember that you
+     *                                           should give three or four reference points if transform selected is "affine" or "projective" respectively.
+     * 
+     * @param {ArrayBuffer|Array}   [dstPoints]  Optional destiny points for a new transform, given as a ArrayBuffer or Array in the form [x1, y1, x2, y2, ...]
+     *                                           or [[x1, y1], [x2, y2], ...]. These destiny points should be declared, for simplicity, in the same range than
+     *                                           the previously given srcPoints and it must be the same amount of dstPoints than srcPoints (as they match one to one).
+     *                                           If no points are given, they should have been setted before through `setDstPoints(points)`.
+     *  
+     * @return {String}             String representation of the transformation matrix, that can be directly applied in to the CSS transform property.
+     */
+
+    getTransformationMatrixAsCSS(srcPoints = null, dstPoints = null){
+        if (srcPoints !== null)
+            this.setSourcePoints(srcPoints);  
+        if (dstPoints !== null)
+            this.setDestinyPoints(dstPoints);
+        
+        if (this._srcPoints === null) throw("Impossible to calculate a transform when srcPoints are not set");
+        else if (this._dstPoints === null) throw("Impossible to calculate a transform when dstPoints are not set");
+        else if (this._transformMatrix === null) throw("Transform matrix can not be calculated");
+        let matrix;
+        switch(this.transform){
+            case "affine":
+                matrix = `matrix(`
+                for (let i = 0; i<this._transformMatrix.length; i++){
+                    matrix += `${this._transformMatrix[i].toFixed(maxCSSDecimal)}`;
+                    if (i < this._transformMatrix.length-1) matrix += `, `;
+                    else matrix += `)`;
+                }
+                break;
+            case "projective":
+                matrix = `matrix3d(`
+                let i = 0;
+                for (let dy = 0; dy<4; dy++){
+                    for (let dx = 0; dx<4; dx++){
+                        if (dy === 2 && dx === 2 || dy === 3 && dx === 3) matrix += `1`;
+                        else if( dy === 2 || dx === 2) matrix += `0`;
+                        else matrix += `${this._transformMatrix[i++].toFixed(maxCSSDecimal)}`
+                        
+                        if (dy*4+dx < 4*4-1) matrix += `, `;
+                        else matrix += `)`;
+                    }
+                }
+                break;
+            default:
+                throw (`Only "affine" or "projective" transforms can be applied on the CSS transform property, but ${this.transform} selected`);
+        }
+        return matrix;
+    }
+
+
 
     /* ----------------------------------------------- PRIVATE FUNCTIONS -------------------------------------------------- */
     /* ------------------------------ These functions should never be used by the user ------------------------------------ */
@@ -538,16 +616,16 @@ class Homography {
             this._putSrcAndDstPointsInSameRange();
         }
             let piecewiseMatrices = [];
-            for(const triangle of this._triangles){
-                // Set in the already allocated memory for doing it faster and keep it as an Int16Array (It would be nice to check other options (including async function))
+            for(let i = 0; i < this._triangles.length; i+=3){
+                // Set in the already allocated memory for doing it faster and keep it as an Int16Array
                 //Set the srcTriangle
-                this._auxSrcTriangle[0] = this._srcPoints[triangle[0]*dims]; this._auxSrcTriangle[1] = this._srcPoints[triangle[0]*dims+1];
-                this._auxSrcTriangle[2] = this._srcPoints[triangle[1]*dims]; this._auxSrcTriangle[3] = this._srcPoints[triangle[1]*dims+1];
-                this._auxSrcTriangle[4] = this._srcPoints[triangle[2]*dims]; this._auxSrcTriangle[5] = this._srcPoints[triangle[2]*dims+1];
+                this._auxSrcTriangle[0] = this._srcPoints[this._triangles[i]<<1]; this._auxSrcTriangle[1] = this._srcPoints[(this._triangles[i]<<1)+1];
+                this._auxSrcTriangle[2] = this._srcPoints[this._triangles[i+1]<<1]; this._auxSrcTriangle[3] = this._srcPoints[(this._triangles[i+1]<<1)+1];
+                this._auxSrcTriangle[4] = this._srcPoints[this._triangles[i+2]<<1]; this._auxSrcTriangle[5] = this._srcPoints[(this._triangles[i+2]<<1)+1];
                 //Set the dstTriangle
-                this._auxDstTriangle[0] = this._dstPoints[triangle[0]*dims]; this._auxDstTriangle[1] = this._dstPoints[triangle[0]*dims+1];
-                this._auxDstTriangle[2] = this._dstPoints[triangle[1]*dims]; this._auxDstTriangle[3] = this._dstPoints[triangle[1]*dims+1];
-                this._auxDstTriangle[4] = this._dstPoints[triangle[2]*dims]; this._auxDstTriangle[5] = this._dstPoints[triangle[2]*dims+1];
+                this._auxDstTriangle[0] = this._dstPoints[this._triangles[i]<<1]; this._auxDstTriangle[1] = this._dstPoints[(this._triangles[i]<<1)+1];
+                this._auxDstTriangle[2] = this._dstPoints[this._triangles[i+1]<<1]; this._auxDstTriangle[3] = this._dstPoints[(this._triangles[i+1]<<1)+1];
+                this._auxDstTriangle[4] = this._dstPoints[this._triangles[i+2]<<1]; this._auxDstTriangle[5] = this._dstPoints[(this._triangles[i+2]<<1)+1];
                 piecewiseMatrices.push(affineMatrixFromTriangles(this._auxSrcTriangle, this._auxDstTriangle))
             }
             return piecewiseMatrices;
@@ -570,13 +648,13 @@ class Homography {
             this._trianglesCorrespondencesMatrix = new Int16Array(matrixLength);
         }
         this._trianglesCorrespondencesMatrix.fill(-1);
-        
-        for (const [i, triangle] of Object.entries(this._triangles)){
+        for(let i = 0; i < this._triangles.length; i+=3){
+            // Set in the already allocated memory for doing it faster and keep it as an Int16Array
             //Set the srcTriangle
-            this._auxSrcTriangle[0] = this._srcPoints[(triangle[0]<<1)]; this._auxSrcTriangle[1] = this._srcPoints[(triangle[0]<<1)+1];
-            this._auxSrcTriangle[2] = this._srcPoints[(triangle[1]<<1)]; this._auxSrcTriangle[3] = this._srcPoints[(triangle[1]<<1)+1];
-            this._auxSrcTriangle[4] = this._srcPoints[(triangle[2]<<1)]; this._auxSrcTriangle[5] = this._srcPoints[(triangle[2]<<1)+1];
-            fillTriangle(this._auxSrcTriangle, i, this._maxSrcX-this._minSrcX, this._minSrcY, this._trianglesCorrespondencesMatrix);
+            this._auxSrcTriangle[0] = this._srcPoints[this._triangles[i]<<1]; this._auxSrcTriangle[1] = this._srcPoints[(this._triangles[i]<<1)+1];
+            this._auxSrcTriangle[2] = this._srcPoints[this._triangles[i+1]<<1]; this._auxSrcTriangle[3] = this._srcPoints[(this._triangles[i+1]<<1)+1];
+            this._auxSrcTriangle[4] = this._srcPoints[this._triangles[i+2]<<1]; this._auxSrcTriangle[5] = this._srcPoints[(this._triangles[i+2]<<1)+1];
+            fillTriangle(this._auxSrcTriangle, i/3, this._maxSrcX-this._minSrcX, this._minSrcY, this._trianglesCorrespondencesMatrix);
         }
         return this._trianglesCorrespondencesMatrix;
     }
@@ -599,13 +677,14 @@ class Homography {
         }
         this._trianglesCorrespondencesMatrix.fill(-1);
 
-        for (const [i, triangle] of Object.entries(this._triangles)){
-            //Set the srcTriangle
-            this._auxDstTriangle[0] = this._dstPoints[(triangle[0]<<1)]; this._auxDstTriangle[1] = this._dstPoints[(triangle[0]<<1)+1];
-            this._auxDstTriangle[2] = this._dstPoints[(triangle[1]<<1)]; this._auxDstTriangle[3] = this._dstPoints[(triangle[1]<<1)+1];
-            this._auxDstTriangle[4] = this._dstPoints[(triangle[2]<<1)]; this._auxDstTriangle[5] = this._dstPoints[(triangle[2]<<1)+1];
-            fillTriangle(this._auxDstTriangle, i, this._objectiveWidth, this._yOutputOffset, this._trianglesCorrespondencesMatrix);
+        for(let i = 0; i < this._triangles.length; i+=3){
+             //Set the dstTriangle
+             this._auxDstTriangle[0] = this._dstPoints[this._triangles[i]<<1]; this._auxDstTriangle[1] = this._dstPoints[(this._triangles[i]<<1)+1];
+             this._auxDstTriangle[2] = this._dstPoints[this._triangles[i+1]<<1]; this._auxDstTriangle[3] = this._dstPoints[(this._triangles[i+1]<<1)+1];
+             this._auxDstTriangle[4] = this._dstPoints[this._triangles[i+2]<<1]; this._auxDstTriangle[5] = this._dstPoints[(this._triangles[i+2]<<1)+1];
+             fillTriangle(this._auxDstTriangle, i/3, this._objectiveWidth, this._yOutputOffset, this._trianglesCorrespondencesMatrix);
         }
+
        return this._trianglesCorrespondencesMatrix;
     }
 
@@ -780,7 +859,6 @@ class Homography {
         const srcRowLenght = this._width<<2;
         const dstRowLenght = this._objectiveWidth<<2;
         const inverseTriangleCorrespondenceMatrix = this._buildInverseTrianglesCorrespondencesMatrix();
-        const s0 = performance.now();   
         const triangleCorrespondenceMatrixWidth = this._objectiveWidth-this._xOutputOffset;
         let inversePiecewiseMatrices = []
         for (let i=0; i<this._piecewiseMatrices.length; i++){
@@ -804,7 +882,6 @@ class Homography {
                 }
             }    
         }    
-        console.log(`Inverse Bucle Performance: ${(performance.now()-s0)/1000} seconds`);
         return output_img;
     }
     
@@ -833,7 +910,8 @@ export {Homography}
 /*      ----------------------------------------------- AUXILIAR FUNCTIONS ---------------------------------------------------                   */
 /*      ---------------------------- These functions will be not accessible for the user -------------------------------------                   */
 
-//      ----------------------------------- To fill Piecewise Correspondence Matrix ------------------------------------------
+//      ------------------------------ To fill up the Piecewise Correspondence Matrix ----------------------------------------
+
 /**
  * Summary.                     PRIVATE AUXILIAR. Fills all the coordinates of the given "trianglesCorrespondencesMatrix" that belongs to the given "triangle" with the
  *                              value of "idx".
@@ -843,27 +921,52 @@ export {Homography}
  *                              solves these equations for x (x = (y-b)/m). Then, as the triangle is the unique polygon that is always convex, fills the subsection of the y^{th}
  *                              row comprised between the minimum and the maximum x solutions.
  * 
- * @param {ArrayBuffer}        triangle  Three points of the triangle, represented as an ArrayBuffer of length 6 ([x1, y1, x2, y2, x3, y3]);
+ * @param {ArrayBuffer|Array}   triangle        Three points of the triangle, represented as a flat ArrayBuffer of length 6 ([x1, y1, x2, y2, x3, y3]).
  * 
- * @return {Uint8ClampedArray}  Uint8ClampedArray of size this._width*this._height*4 (RGBA channels) containing the image.
+ * @param {Number}              idx             Value for filling up the coordinates of the matrix. It will usually be the index of the triangle in the this._triangles property
+ *                                              of the Homography object. But in others settings it could be reused for other purposes like, for example, triangles colorization.
+ *                                        
+ * @param {Number}              matrix_width    Width of the trianglesCorrespondencesMatrix. It is necessary since, despite it refers to a 2-dimensional it is being represented as
+ *                                              a flat ArrayBuffer.
+ * 
+ * @param {Number}              yOffset         Minimum value of y in the source reference points. It is used because, for performance reasons, the "trianglesCorrespondencesMatrix"
+ *                                              fits the image without any 0's pad.
+ * 
+ * @param {ArrayBuffer}         trianglesCorrespondencesMatrix  Matrix to be filled up with the values of "idx", at the coordinates that belongs to the given "triangle".
+ * 
  * 
  */
 function fillTriangle(triangle, idx, matrix_width, yOffset, trianglesCorrespondencesMatrix){
+    // Take the first point in Y that will belong to the given triangle
     const minY = ~~Math.min(triangle[1], triangle[3], triangle[5]);
+    // Take the last point in Y that will belong to the given triangle
     const maxY = Math.ceil(Math.max(triangle[1], triangle[3], triangle[5]));
-    //Set the the width to manage the offset of the matrix
-    const trianglesCorrespondencesMatrixWidth = matrix_width;
+    // Calculate the equation of the line for each segment of the triangle
+    const segments = defineTriangleLineEquations(triangle);
     let xOrigin, xDestiny;
-    const segments = defineTriangleSegments(triangle);
+    // For each row of the matrix belonging to the given triangle
     for (let y = minY; y < maxY; y++){
+        // Get the first and the last point where they intersect in X (inside the segment bounds)
         [xOrigin, xDestiny] = predictXLimits(segments, y);
-        trianglesCorrespondencesMatrix.fill(idx, (y-yOffset)*trianglesCorrespondencesMatrixWidth + xOrigin, (y-yOffset)*trianglesCorrespondencesMatrixWidth + xDestiny);
-        
+        //Fill that subsection of the matrix with the given idx
+        trianglesCorrespondencesMatrix.fill(idx, (y-yOffset)*matrix_width + Math.round(xOrigin), (y-yOffset)*matrix_width + Math.round(xDestiny));
     }
 }
 
+/**
+ * Summary.                     PRIVATE AUXILIAR. Calculates the equation of the line (m and b parameters of (y = mx + b)), as well as they y boundaries for each segment
+ *                              of the triangle.
+ *                              
+ * 
+ * Description.                 PRIVATE AUXILIAR. For the vertical line cases, m will be defined as Infinite. In these cases the value of x should be directly x = b.
+ *                              For horizontal line cases (m = 0) x will have no solution, as there would be infinite solutions for x given an y.
+ * 
+ * @param {ArrayBuffer|Array}   triangle   Three points of the triangle, represented as a flat ArrayBuffer of length 6 ([x1, y1, x2, y2, x3, y3]).
+ * 
+ * @returns {Array<LineEquations>}         Array with the line equations for each one of the three sides of the triangle, in the form {m, b, minY, maxY}.
+ */
 
-function defineTriangleSegments(triangle){
+function defineTriangleLineEquations(triangle){
     // Equation of segment is y = mx + b. So x x = (y-b)/m. m = (y2-y1)/(x2-x1) and b = y - xm
     let [x0, y0, x1, y1, x2, y2] = triangle;
             // p0->1 
@@ -875,41 +978,90 @@ function defineTriangleSegments(triangle){
     
 }
 
+/**
+ * Summary.                     PRIVATE AUXILIAR. Given a set of line equations including their y boundaries ({m, b, minY, maxY}) and a value of y, calculates the first
+ *                              minimum and the maximum solution for x among them.
+ *                              
+ * 
+ * Description.                 PRIVATE AUXILIAR. For the vertical line cases, where m is defined as Infinite soultion should be directly x = b. For horizontal line
+ *                              cases (m = 0) x will have no solution, so this segment will be not taken into account. For the rest of cases, it will only take into
+ *                              account the result if y is inside the minY and maxY boundaries, as otherwise it would mean that the x solution would be outside the
+ *                              segment. NOTE that only when the polygon represented by equations is convex (as it always happens with triangles) it is sure that all
+ *                              points between firstX and lastX will belong to the polygon. This property is not met for concave polygons.
+ * 
+ * @param {Array<LineEquations>}    equations   An array containing the line equations for each side of a convex polygon. In this case, they will be usually given
+ *                                              by the function defineTriangleLineEquations(triangle).
+ * 
+ * @param {Number}                  y           The value of y for which to calculate the first and the last value of x.
+ * 
+ * @returns {Array<Number>}         FirstX, and LastX. The first and the last x coordinates where a segment defined in equations intersects with y.
+ * 
+ */
 function predictXLimits(equations, y){
-    //x = (y-b)/m
-    //Calculate solution of every segment for x.
+    //Calculate the solution of every equation for x.
     let x;
     let min = Infinity;
     let max = -Infinity;
     for (let i = 0; i<equations.length; i++){
+        // If the segment defined by the i^{th} equation intersects with y, calculate its result.
         if (y >= equations[i].minY && y <= equations[i].maxY){
-            if (equations[i].m === Infinity){ //On vertical line just use the value of the vertex
+            //  If the slope (m) is Infinity, it is a vertical line. Just set m = b, as for vertical lines x does not depend on y.
+            if (equations[i].m === Infinity){
                 x = equations[i].b;
-            } else if (equations[i].m === 0){ //Slope 0 -> No info about X
+            // If the slope is 0, it is an horizontal line, so there are infinite solutions for X if line intersects with y or 0 solution if not. Just skip it.
+            } else if (equations[i].m === 0){
                 continue;
+            // Otherwise, calculate x as x = (y-b)/m
             } else {
                 x = ((y-equations[i].b)/equations[i].m);
             }
+            // Set the maximum and the minimum intersection (NOTE that in convex polygons will be always two intersections (as we skip the m = 0 cases).
             if (x<min) min = x;
             if (x>max) max = x;
-        } // else, the line does not collide with y
+        }
     }
-    return [Math.round(min), Math.round(max)]
+    // Return the FirstX and LastX (NOTE that they are can contain decimals, so take that into account when indexing arrays).
+    return [min, max]
 }
 
-
+/**
+ * Summary.                     PRIVATE AUXILIAR. Given a set of points ([x1, y1, x2, y2, ..., xn, yn]), returns a set the set of triangles that connects all of the points
+ *                              and mets the Delaunay condition (the circumference that circumscribes each triangle must not contain any vertex from another triangle).
+ * 
+ * Description.                 PRIVATE AUXILIAR. It is the unique function within Homography.js that have a dependency with an external library (https://github.com/mapbox/delaunator).
+ *                              This function is only used when applying Piecewise Affine Transforms, so for the cases where it is not a user requirement a simplified minified file,
+ *                              could be build avoiding this function (and its dependency). There are two other solutions for this dependency:
+ *                                  1. Develop a Delaunay algorithm. However, the one developed by Mapbox is extremely efficient and it would be really difficult to improve their
+ *                                     performance.
+ *                                  2. Download the library and append its code to this file, as it is open sourced under the MIT License (no problem with public or private copies).
+ *                                     However, it also depends on a functionality from another library, that is divided in some files and... it would make this code a little bit messy.
+ * 
+ * @param {ArrayBuffer}    points   TypedArray (for improving performance) containing all the 2D points in the format [x1, y1, x2, y2, ..., xn, yn].
+ * 
+ * @returns {Array<Array<Number>>}  An Array of triangles, being each triangle an Array of 3 numbers, that are the indices of the three vertex of each triangle in the array points.
+ * 
+ */
 function Delaunay(points){
-    const delaunay = new Delaunator(points);
-    const triangles = delaunay.triangles;
-    let triangles_idx = [];
-    for (let i = 0; i < triangles.length; i += 3) {
-        triangles_idx.push([triangles[i], triangles[i+1], triangles[i+2]]);
-    }
-    return triangles_idx;
+    return new Delaunator(points).triangles;
 }
 
-
-
+//                    ------------------------------ Calculate the transform matrices ----------------------------------------
+/**
+ * Summary.                     PRIVATE AUXILIAR. Given two set of reference points in the form ([x1, y1, x2, y2, ..., xn, yn]), calculate the Affine or the Projective Transform that
+ *                              maps the first set to second one.
+ * 
+ * Description.                 PRIVATE AUXILIAR. This function does not return the complete transform matrix for the projective case, but only the positions of it that are useful
+ *                              for calculating transforms.
+ * 
+ * @param {Transform}           transform   String indicating the selected transform, that must be "affine" or "projecive".
+ * 
+ * @param {ArrayBuffer|Array}   srcPoints   Source reference points in the form [x1, y1, x2, y2, ..., xn, yn]. n must be 3 for Affine transforms or 4 for Projective.
+ * 
+ * @param {ArrayBuffer|Array}   dstPoints   Destiny reference points in the form [x1, y1, x2, y2, ..., xn, yn]. n must be the same as in srcPoints.
+ * 
+ * @returns {Float32Array}       A Float32Array containing the transform matrix that maps srcPoints to dstPoints. In the case of Projective transform it is not a 4x4 matrix, but an
+ *                               Array of length 8 containing only the positions of it that are useful for calculating transforms.
+ */
 function calculateTransformMatrix(transform, srcPoints, dstPoints){
     let matrix;
     switch(transform){
@@ -925,21 +1077,20 @@ function calculateTransformMatrix(transform, srcPoints, dstPoints){
     return matrix;
 }
 
-function getTransformFunction(transform){
-    switch(transform){
-        case 'affine':
-            return applyAffineTransformToPoint;
-        case 'projective':
-            return applyProjectiveTransformToPoint;
-        default:
-            throw(`${transform} transform does not exist`);
-    }
-}
-
-function affineMatrixFromTriangles(srcTriangle, dstTriangle){
-    /**
-     * Gets the 2x3 transform matrix from two triangles got as TypedArray of positions (for performance reasons)
-     */
+/**
+ * Summary.                     PRIVATE AUXILIAR. Estimates the Affine transform matrix that maps from srcTriangle to dstTriangle, both given in the form [x1, y1, x2, y2, x3, y3].
+ * 
+ * Description.                 PRIVATE AUXILIAR. Although it is not checked here for performance reasons, this function could produce a division between 0 if two points in 
+ *                              source or two points in destiny are really the identical points.
+ * 
+ * @param {ArrayBuffer|Array}   srcTriangle   Source reference points in the form [x1, y1, x2, y2, x3, y3].
+ * 
+ * @param {ArrayBuffer|Array}   dstTriangle   Destiny reference points in the form [x1, y1, x2, y2, x3, y3]. 
+ * 
+ * @returns {Float32Array}      A Float32Array representing the 2x3 transform matrix that maps srcTriangle to dstTriangle.
+ * 
+ */
+ function affineMatrixFromTriangles(srcTriangle, dstTriangle){
         
         // Set the [[a, b, c], [d, e, f]] points of the matrix but as variables, for avoiding memory allocations until the last moment
         // Src matrix (that will be inversed later)
@@ -979,18 +1130,47 @@ function affineMatrixFromTriangles(srcTriangle, dstTriangle){
             (dstA * invSrcE) + (dstC * invSrcF) + dstE, //e
             (dstB * invSrcE) + (dstD * invSrcF) + dstF  //f
         ]);
-        // Some codes rounds it to a maximum decimal for smoothing reasons
         return affineMatrix
-
 }
 
+/**
+ * Summary.                     PRIVATE AUXILIAR. Estimates the Projective transform matrix that maps from srcSquare to dstSquare, both given in the form [x1, y1, x2, y2, x3, y3, x4, y4].
+ * 
+ * Description.                 PRIVATE AUXILIAR. It relies on the Linear System solver of numeric.js which is in the Third Party code section at the footer of this file.
+ * 
+ * @param {ArrayBuffer|Array}   srcSquare   Source reference points in the form [x1, y1, x2, y2, x3, y3, x4, y4].
+ * 
+ * @param {ArrayBuffer|Array}   dstSquare   Destiny reference points in the form [x1, y1, x2, y2, x3, y3, x4, y4]. 
+ * 
+ * @returns {Float32Array}      A Float32Array representing the 2x3 transform matrix that maps srcTriangle to dstTriangle.
+ * 
+ */
+function projectiveMatrixFromSquares(srcSquare, dstSquare){
+
+     const A = [[srcSquare[0], srcSquare[1], 1, 0, 0, 0, -dstSquare[0]*srcSquare[0], -dstSquare[0]*srcSquare[1]],
+                [0, 0, 0, srcSquare[0], srcSquare[1], 1, -dstSquare[1]*srcSquare[0], -dstSquare[1]*srcSquare[1]],
+                [srcSquare[2], srcSquare[3], 1, 0, 0, 0, -dstSquare[2]*srcSquare[2], -dstSquare[2]*srcSquare[3]],
+                [0, 0, 0, srcSquare[2], srcSquare[3], 1, -dstSquare[3]*srcSquare[2], -dstSquare[3]*srcSquare[3]],
+                [srcSquare[4], srcSquare[5], 1, 0, 0, 0, -dstSquare[4]*srcSquare[4], -dstSquare[4]*srcSquare[5]],
+                [0, 0, 0, srcSquare[4], srcSquare[5], 1, -dstSquare[5]*srcSquare[4], -dstSquare[5]*srcSquare[5]],
+                [srcSquare[6], srcSquare[7], 1, 0, 0, 0, -dstSquare[6]*srcSquare[6], -dstSquare[6]*srcSquare[7]],
+                [0, 0, 0, srcSquare[6], srcSquare[7], 1, -dstSquare[7]*srcSquare[6], -dstSquare[7]*srcSquare[7]]];
+     
+     const H = solve(A,dstSquare,true);
+     return H;
+}
+
+/**
+ * Summary.                     PRIVATE AUXILIAR. Invert a 3x2 affine matrix
+ * 
+ * Description.                 PRIVATE AUXILIAR. This function could produce a division by 0 if a*d === b*c.  
+ * 
+ * @param {ArrayBuffer}   matrix    3x2 Affine transform matrix
+ * 
+ * @returns {Float32Array}          The inverse of the input matrix.
+ * 
+ */
 function inverseAffineMatrix(matrix){
-    /**
-     * Gets the 2x3 transform matrix from two triangles got as TypedArray of positions (for performance reasons)
-     */
-        
-        // Set the [[a, b, c], [d, e, f]] points of the matrix but as variables, for avoiding memory allocations until the last moment
-        // Src matrix (that will be inversed later)
         const srcA = matrix[0];
         const srcB = matrix[1];
         const srcC = matrix[2];
@@ -998,7 +1178,7 @@ function inverseAffineMatrix(matrix){
         const srcE = matrix[4];
         const srcF = matrix[5];
         let invMatrix = new Float32Array(6)
-        //Inverse the source matrix
+        //Inverse the matrix
         const denominator = srcA * srcD - srcB * srcC;
         
         invMatrix[0] = srcD / denominator;
@@ -1012,36 +1192,84 @@ function inverseAffineMatrix(matrix){
 
 }
 
-function calculateTransformLimits(matrix, width, height){
-    let p0_0, p1_0, p0_1, p1_1;
-    // Affine Transform Case
-    if (matrix.length === 6){
-        p0_0 = applyAffineTransformToPoint(matrix, 0, 0);
-        p1_0 = applyAffineTransformToPoint(matrix, 0, height);
-        p0_1 = applyAffineTransformToPoint(matrix, width, 0);
-        p1_1 = applyAffineTransformToPoint(matrix, width, height);
-    // Projective Transform Case
-    } else if (matrix.length === 8){
-        p0_0 = applyProjectiveTransformToPoint(matrix, 0, 0);
-        p1_0 = applyProjectiveTransformToPoint(matrix, 0, height);
-        p0_1 = applyProjectiveTransformToPoint(matrix, width, 0);
-        p1_1 = applyProjectiveTransformToPoint(matrix, width, height);
-    } else {
-        throw(`Transform matrix have an incorrect shape --> ${matrix}`);
-    }
-    // It must check all the points in order to allow mirroring
-    const xOutputOffset = Math.min(p0_0[0], p1_0[0], p0_1[0], p1_1[0]);
-    const yOutputOffset = Math.min(p0_0[1], p0_1[1], p1_0[1], p1_1[1]);
-    const outWidth = Math.max(p0_1[0], p1_1[0], p0_0[0], p1_0[0]) - xOutputOffset;
-    const outHeight = Math.max(p1_0[1], p1_1[1], p0_0[1], p0_1[0]) - yOutputOffset;
-    return [Math.round(xOutputOffset), Math.round(yOutputOffset), Math.round(outWidth), Math.round(outHeight)];
+//               ------------------------------------- Transform singular points -------------------------------------------
 
+
+/**
+ * Summary.                     PRIVATE AUXILIAR. Apply an Affine transform matrix over a point.
+ * 
+ * @param {ArrayBuffer}   matrix    3x2 Affine transform matrix to be applyed.
+ * 
+ * @param {Number}        x         x coordinate of the point.
+ * 
+ * @param {Number}        y         y coordinate of the point.
+ * 
+ * @returns {Array<Number>}         [x, y] array containing the transformed coordinates.
+ * 
+ */
+function applyAffineTransformToPoint(matrix, x, y){
+    return [(matrix[0] * x) + (matrix[2] * y) + matrix[4], //x
+            (matrix[1] * x) + (matrix[3] * y) + matrix[5]] //y
 }
 
+/**
+ * Summary.                     PRIVATE AUXILIAR. Apply a Projective transform matrix over a point.
+ * 
+ * Description.                 PRIVATE AUXILIAR. This function could produce a division by 0 if (matrix[6]*x + matrix[7]*y + 1) is 0. 
+ * 
+ * @param {ArrayBuffer}   matrix    3x2 Affine transform matrix to be applyed.
+ * 
+ * @param {Number}        x         x coordinate of the point.
+ * 
+ * @param {Number}        y         y coordinate of the point.
+ * 
+ * @returns {Array<Number>}         [x, y] array containing the transformed coordinates.
+ * 
+ */
+function applyProjectiveTransformToPoint(matrix, x, y){
+    return [(matrix[0]*x + matrix[1]*y + matrix[2]) / (matrix[6]*x + matrix[7]*y + 1),   //x
+            (matrix[3]*x + matrix[4]*y + matrix[5]) / (matrix[6]*x + matrix[7]*y + 1)]; //y
+}
+
+/**
+ * Summary.                     PRIVATE AUXILIAR. Returns the callback that must be used for applying the given transform to a point
+ * 
+ * Description.                 PRIVATE AUXILIAR. It will return one of both applyAffineTransformToPoint or applyProjectiveTransformToPoint.
+ * 
+ * @param {"affine"|"projective"}     transform    Transform to be applied. One of "affine" or "projective".
+ * 
+ * @returns {Function}                Function to be applied. This function will always receive as parameters (matrix, x, y).
+ * 
+ */
+function getTransformFunction(transform){
+    switch(transform){
+        case 'affine':
+            return applyAffineTransformToPoint;
+        case 'projective':
+            return applyProjectiveTransformToPoint;
+        default:
+            throw(`${transform} transform does not exist`);
+    }
+}
+
+//               ------------------------------- Validity Check -------------------------------------------
+
+/**
+ * Summary.                     PRIVATE AUXILIAR. Verifies that the selected Transform is coherent with the given points, or select the best transform for these points
+ *                              if "auto" is selected.
+ * 
+ * Description.                 PRIVATE AUXILIAR. It must be taken into account that, when "auto" transform is selected and just 4 points are given, the applicable transform could
+ *                              be "projective" or "piecewiseaffine". In this case "projective" is selected by default as it is the most common use case. If the amount of points given
+ *                              does not match with the selected transform, this function will throw an error.
+ *  
+ * @param {Transform}           transform   Transform to be checked in the case of ("affine", "projective" or "piecewiseaffine"). In the case of "auto" the transform will be selected.
+ * 
+ * @param {ArrayBuffer|Array}   points      Reference points in the form [x1, y1, x2, y2, ..., xn, yn]. 
+ * 
+ * @returns {Transform}         Input transform if "affine", "projective" or "piecewiseaffine" was given, or selected transform if "auto" was given.
+ * 
+ */
 function checkAndSelectTransform(transform, points){
-    /**
-     * Verifies that this.srcPoints is in accordance with the selected transform, or select one transform if 'auto' 
-     */
 
     switch(transform){
         case 'auto': 
@@ -1053,10 +1281,7 @@ function checkAndSelectTransform(transform, points){
         
         case 'piecewiseaffine':
             // If it have only 3 points it is an affine transform.
-            if (points.length === 3*dims){
-                transform = 'affine';
-                console.warn('Only 3 source points given but "piecewiseAffine" transform selected. Transform changed to "affine".');
-            } else if (points.length < 3*dims){
+            if (points.length < 3*dims){
                 throw(`A piecewise (or affine) transform needs to determine least three reference points but only ${points.length/dims} were given`);
             }
             // Correct
@@ -1079,60 +1304,90 @@ function checkAndSelectTransform(transform, points){
     return transform;
 }
 
-function applyAffineTransformToPoint(matrix, x, y){
-    return [(matrix[0] * x) + (matrix[2] * y) + matrix[4], //x
-            (matrix[1] * x) + (matrix[3] * y) + matrix[5]] //y
+
+//               ------------------------------------- Utils -------------------------------------------
+
+/**
+ * Summary.                     PRIVATE AUXILIAR. Calculate the boundaries of the output image when applying an Affine or a Projective transformation on it.
+ * 
+ * Description.                 PRIVATE AUXILIAR. It is really equivalent to apply the transformation to the points [[0, 0], [width, 0], [0, height], [width, height]].
+ *  
+ * @param {ArrayBuffer}   matrix    An ArrayBuffer representing an Affine Transform matrix or a Projective Transform matrix. 
+ * 
+ * @param {Number}        width     Width of the source image
+ * 
+ * @param {Number}        height    Height of the source image
+ * 
+ * @returns {Array<Number>}         [xOutputOffset, yOutputOffset, outputWidth, outputHeight]. outputWidth and outputHeight will represent the size and height of the needed
+ *                                  output image. xOutputOffset and yOutputOffset will represent at which point of the output image the (x=0, y=0) positon of the image will
+ *                                  be located. It is useful for avoiding pads or preventing crops. As outputs are intended to be used over image coordinates they are given
+ *                                  as Integers.
+ * 
+ */
+function calculateTransformLimits(matrix, width, height){
+    let p0_0, p1_0, p0_1, p1_1;
+    // Affine Transform Case
+    if (matrix.length === 6){
+        p0_0 = applyAffineTransformToPoint(matrix, 0, 0);
+        p1_0 = applyAffineTransformToPoint(matrix, 0, height);
+        p0_1 = applyAffineTransformToPoint(matrix, width, 0);
+        p1_1 = applyAffineTransformToPoint(matrix, width, height);
+    // Projective Transform Case
+    } else if (matrix.length === 8){
+        p0_0 = applyProjectiveTransformToPoint(matrix, 0, 0);
+        p1_0 = applyProjectiveTransformToPoint(matrix, 0, height);
+        p0_1 = applyProjectiveTransformToPoint(matrix, width, 0);
+        p1_1 = applyProjectiveTransformToPoint(matrix, width, height);
+    } else {
+        throw(`Transform matrix have an incorrect shape --> ${matrix.length}`);
+    }
+    // It must check all the points in order to allow mirroring
+    const xOutputOffset = Math.min(p0_0[0], p1_0[0], p0_1[0], p1_1[0]);
+    const yOutputOffset = Math.min(p0_0[1], p0_1[1], p1_0[1], p1_1[1]);
+    const outWidth = Math.max(p0_1[0], p1_1[0], p0_0[0], p1_0[0]) - xOutputOffset;
+    const outHeight = Math.max(p1_0[1], p1_1[1], p0_0[1], p0_1[0]) - yOutputOffset;
+    return [Math.round(xOutputOffset), Math.round(yOutputOffset), Math.round(outWidth), Math.round(outHeight)];
+
 }
 
-
-function applyProjectiveTransformToPoint(matrix, x, y){
-    return [(matrix[0]*x + matrix[1]*y + matrix[2]) / (matrix[6]*x + matrix[7]*y + 1),   //x
-            (matrix[3]*x + matrix[4]*y + matrix[5]) / (matrix[6]*x + matrix[7]*y + 1)]; //y
-}
-
-function projectiveMatrixFromSquares(srcSquare, dstSquare){
-    /**
-     * Gets the 4x2 transform matrix from two squares, got as TypedArray of positions (for performance reasons)
-     */
-     const A = [[srcSquare[0], srcSquare[1], 1, 0, 0, 0, -dstSquare[0]*srcSquare[0], -dstSquare[0]*srcSquare[1]],
-                [0, 0, 0, srcSquare[0], srcSquare[1], 1, -dstSquare[1]*srcSquare[0], -dstSquare[1]*srcSquare[1]],
-                [srcSquare[2], srcSquare[3], 1, 0, 0, 0, -dstSquare[2]*srcSquare[2], -dstSquare[2]*srcSquare[3]],
-                [0, 0, 0, srcSquare[2], srcSquare[3], 1, -dstSquare[3]*srcSquare[2], -dstSquare[3]*srcSquare[3]],
-                [srcSquare[4], srcSquare[5], 1, 0, 0, 0, -dstSquare[4]*srcSquare[4], -dstSquare[4]*srcSquare[5]],
-                [0, 0, 0, srcSquare[4], srcSquare[5], 1, -dstSquare[5]*srcSquare[4], -dstSquare[5]*srcSquare[5]],
-                [srcSquare[6], srcSquare[7], 1, 0, 0, 0, -dstSquare[6]*srcSquare[6], -dstSquare[6]*srcSquare[7]],
-                [0, 0, 0, srcSquare[6], srcSquare[7], 1, -dstSquare[7]*srcSquare[6], -dstSquare[7]*srcSquare[7]]];
-     
-     const H = solve(A,dstSquare,true);
-
-     /*
-     for(let i=0; i<8; i+=2){
-        const [a, c] = applyProjectiveTransformToPoint(H, srcSquare[i], srcSquare[i+1], true)
-        console.log("From: "+srcSquare[i]+" to "+srcSquare[i+1]+". Expected to go: "+dstSquare[i]+", "+dstSquare[i+1]+ ". Went to: "+a+", "+c);
-     }
-     console.log(H);
-     */
-     return H;
-
-}
-
-
+/**
+ * Summary.                     PRIVATE AUXILIAR. Returns True if an array contains a value greater than "value" or 0 if not.
+ *  
+ * @param {ArrayBuffer|Array}   iterable    An Array containing numeric sortable values (usually numbers).
+ * 
+ * @param {Number}              value       Value to be checked.
+ * 
+ * @returns {Boolean}           True if the input "iterable" contains any value greater than "value" or false otherwise.
+ * 
+ */
 function containsValueGreaterThan(iterable, value){
     for (let i=0; i<iterable.length; i++){
-        if (iterable[i] > value){
-            return true
-        }
+        if (iterable[i] > value) return true;
     }
-    return false
+    return false;
 }
 
+/**
+ * Summary.                     PRIVATE AUXILIAR. Returns the minimum and maximum X and Y within an array with the form [x1, y1, x2, y2, ..., xn, yn].
+ *  
+ * @param {ArrayBuffer|Array}   array       An Array containing a set of x and y coordinates with the form [x1, y1, x2, y2, ..., xn, yn].
+ * 
+ * @param {Boolean}             rounded     If true return Integer values (default), if false return values as appears in the array. Integer values are usually
+ *                                          more convenient when calculating over Image coordinates.
+ * 
+ * @returns {Array<Number>}     [minX, minY, maxX, maxY]. Minimum X, minimum Y, maximumX and maximumY found in the array. As integers if rounded is true, or as
+ *                              they appear if rounded is false.
+ * 
+ */
 function minmaxXYofArray(array, rounded = true){
-    let maxX = -10000;
-    let maxY = -10000;
-    let minX = 10000;
-    let minY = 10000;
+    // Set maximums to Infinity and minimums to -Infinity, in order to be always changed with the first point checked.
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let minX = Infinity;
+    let minY = Infinity;
     for (let i=0; i<array.length; i++){
         const element = array[i];
+        // Set minimums and maximums
         if ((i%2) === 0){
             if(element > maxX){
                 maxX = element;
@@ -1149,6 +1404,7 @@ function minmaxXYofArray(array, rounded = true){
             }
         }
     }
+    // Round the values before returning them
     if(rounded){
         return [Math.round(minX), Math.round(minY), Math.round(maxX), Math.round(maxY)];
     } else {
@@ -1156,21 +1412,45 @@ function minmaxXYofArray(array, rounded = true){
     }
 }
 
+/**
+ * Summary.                     PRIVATE AUXILIAR. Denormalize an array of points by multiplying x's by width and y's by height.
+ * 
+ * Description.                 PRIVATE AUXILIAR. NOTE that this function does not return any value, as points are modified in place for performance reasons.
+ *  
+ * @param {ArrayBuffer|Array}   points    An Array containing a set of x and y coordinates with the form [x1, y1, x2, y2, ..., xn, yn], in a normalized range (usually [0.0, 1.0]).
+ * 
+ * @param {Number}              width     Width of the new range.
+ * 
+ * @param {Number}              height    Height of the new range.
+ * 
+ */
 function denormalizePoints(points, width, height){
     for (let i = 0; i < points.length; i++){
         points[i] = (i%2) === 0? points[i]*width : points[i]*height;
     }
 }
 
+/**
+ * Summary.                     PRIVATE AUXILIAR. Normalize an array of points by dividing x's by width and y's by height.
+ * 
+ * Description.                 PRIVATE AUXILIAR. NOTE that this function does not return any value, as points are modified in place for performance reasons.
+ *  
+ * @param {ArrayBuffer|Array}   points    An Array containing a set of x and y coordinates with the form [x1, y1, x2, y2, ..., xn, yn], in a [0, width] ~ [0, height] range.
+ * 
+ * @param {Number}              width     Width of the old range. Usually the width of the image where the points belongs to.
+ * 
+ * @param {Number}              height    Height of the old range. Usually the height of the image where the points belongs to.
+ * 
+ */
 function normalizePoints(points, width, height){
     for (let i = 0; i < points.length; i++){
         points[i] = (i%2) === 0? points[i]/width : points[i]/height;
     }
 }
 
-  // ------------------------------------ THIRD PARTY ---------------------------------------------
+  // ------------------------------------- THIRD PARTY -----------------------------------------------------
 
-  // ------------------------------------ Numeric.js ---- https://github.com/sloisel/numeric ------
+  // ------------------------------ Functions from Numeric.js ---- https://github.com/sloisel/numeric ------
   /*
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -1191,7 +1471,7 @@ function normalizePoints(points, width, height){
     THE SOFTWARE.
   */
  
-  function clone(A,k,n) {
+function clone(A,k,n) {
     if(typeof k === "undefined") { k=0; }
     if(typeof n === "undefined") { n = 1;}//numeric.sdim(A).length; }
     var i,ret = Array(A.length);
@@ -1204,13 +1484,14 @@ function normalizePoints(points, width, height){
     }
     return ret;
 }
+
 function LUsolve(LUP, b) {
     var i, j;
     var LU = LUP.LU;
     var n   = LU.length;
     var x = clone(b);
     var P   = LUP.P;
-    var Pi, LUi, LUii, tmp;
+    var Pi, LUi, tmp;
   
     for (i=n-1;i!==-1;--i) x[i] = b[i];
     for (i = 0; i < n; ++i) {
