@@ -1,5 +1,5 @@
 # Homography.js
-Lightweight library for performing image homographies in javascript
+Homography.js is a lightweight high-performance library for implementing image homographies in Javascript. It is designed to be simple (even for developers that are not familiar with computer vision), and able to run in real time video applications even in low-specification devices such as smartphones.
 
 <table>
 <thead>
