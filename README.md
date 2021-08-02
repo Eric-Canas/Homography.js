@@ -51,7 +51,7 @@ Lightweight library for performing image homographies in javascript
     <td align="center">36.3 fps</td>
   </tr>
   <tr>
-    <td><i>Piecewise Affine (2 Triangles)</i></td>
+    <td><i>Piecewise Aff. (2 Triangles)</i></td>
     <td align="center">7 ms</td>
     <td align="center">1.1 ms</td>
     <td align="center">892.9 fps</td>
@@ -63,7 +63,7 @@ Lightweight library for performing image homographies in javascript
     <td align="center">60.6 fps</td>
   </tr>
   <tr>
-    <td><i>Piecewise Affine (360 Tri.)</i></td>
+    <td><i>Piecewise Aff. (360 Tri.)</i></td>
     <td align="center">26 ms</td>
     <td align="center">2.1 ms</td>
     <td align="center">487 fps</td>
@@ -82,7 +82,7 @@ Lightweight library for performing image homographies in javascript
     <td align="center">228 ms</td>
     <td align="center">11.5 ms</td>
     <td align="center">87.1 fps</td>
-    <td align="center">28.9 ms</td>
+    <td align="center">289 ms</td>
     <td align="center">62 ms</td>
     <td align="center">16.1 fps</td>
   </tr>
