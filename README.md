@@ -13,14 +13,17 @@ Benchmark results for every kind of transformation.
     <li> <b>You can test</b> the concrete performance of your objective device just by executing the <b><a href="./test/benchmark.html" target="_blank">benchmark.html</a></b>. <i>Take into account that this execution can take some minutes, since it executes 2,000 frames for each single warping experiment, and 200,000 for each CSS experiment</i>.</li>
 </ul>
   
-Performance on an Average Desktop PC. 
+Performance tests on an Average Desktop PC. 
 <table>
 <thead>
   <tr>
-    <th colspan="10">Image Data Warping</th>
+    <th colspan="10"><a href="https://ark.intel.com/content/www/us/en/ark/products/97123/intel-core-i57500-processor-6m-cache-up-to-3-80-ghz.html" target="_blank">Intel Core i5-7500 Quad-Core</a>. Chrome 92.0.4515.107. Windows 10.</th>
   </tr>
 </thead>
 <tbody>
+  <tr>
+    <td colspan="10" align="center"><b>Image Data Warping</td></td>
+  </tr>
   <tr>
     <td></td>
     <td colspan="3" align="center"><b>400x400 &#8614; 200x200</b></td>
@@ -100,7 +103,7 @@ Performance on an Average Desktop PC.
     <td align="center">16.1 fps</td>
   </tr>
   <tr>
-    <td colspan="10" align="center"><b>"</b></td>
+    <td colspan="10" align="center"><b>CSS Transform Calculation</b></td>
   </tr>
   <tr>
     <td><b>Transform</b></td>
@@ -119,6 +122,120 @@ Performance on an Average Desktop PC.
     <td colspan="3" align="center">4 ms</td>
     <td colspan="3" align="center">0.016 ms</td>
     <td colspan="3" align="center">61,650.38 fps</td>
+  </tr>
+</tbody>
+</table>
+    
+
+Performance tests on a budget smartphone (a bit destroyed).
+<table>
+<thead>
+  <tr>
+    <th colspan="10"><a href="https://www.mi.com/global/redmi-note-5/specs/" target="_blank">Xiaomi Redmi Note 5<a>. Chrome 92.0.4515.115. Android 8.1.0 </th>
+  </tr>
+</thead>
+<tbody>
+  <tr>
+    <td colspan="10" align="center"><b>Image Data Warping</b></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td colspan="3" align="center"><b>400x400 &#8614; 200x200</b></td>
+    <td colspan="3" align="center"><b>400x400 &#8614; 400x400</b></td>
+    <td colspan="3" align="center"><b>400x400 &#8614; 800x800</b></td>
+  </tr>
+  <tr>
+    <td><b>Transform</b></td>
+    <td align="center"><i>First Frame</i></td>
+    <td align="center"><i>Rest of Frames</i></td>
+    <td align="center"><i>Frame Rate</i></td>
+    <td align="center"><i>First Frame</i></td>
+    <td align="center"><i>Rest of Frames</i></td>
+    <td align="center"><i>Frame Rate</i></td>
+    <td align="center"><i>First Frame</i></td>
+    <td align="center"><i>Rest of Frames</i></td>
+    <td align="center"><i>Frame Rate</i></td>
+  </tr>
+  <tr>
+    <td><i>Affine</i></td>
+    <td align="center">25 ms</td>
+    <td align="center">4.5 ms</td>
+    <td align="center">221.5 fps</td>
+    <td align="center">84 ms</td>
+    <td align="center">16.9 ms</td>
+    <td align="center">59.11 fps</td>
+    <td align="center">127 ms</td>
+    <td align="center">64.7 ms</td>
+    <td align="center">15.46 fps</td>
+  </tr>
+  <tr>
+    <td><i>Projective</i></td>
+    <td align="center">38 ms</td>
+    <td align="center">15.5 ms</td>
+    <td align="center">64.4 fps</td>
+    <td align="center">150 ms</td>
+    <td align="center">56.8 ms</td>
+    <td align="center">17.6 fps</td>
+    <td align="center">232 ms</td>
+    <td align="center">216 ms</td>
+    <td align="center">4.62 fps</td>
+  </tr>
+  <tr>
+    <td><i>Piecewise Affine (2 Triangles)</i></td>
+    <td align="center">35 ms</td>
+    <td align="center">8.8 ms</td>
+    <td align="center">113.9 fps</td>
+    <td align="center">316 ms</td>
+    <td align="center">31.7 ms</td>
+    <td align="center">31.6 fps</td>
+    <td align="center">138 ms</td>
+    <td align="center">118 ms</td>
+    <td align="center">8.5 fps</td>
+  </tr>
+  <tr>
+    <td><i>Piecewise Affine (360 Tri.)</i></td>
+    <td align="center">151 ms</td>
+    <td align="center">14.3 ms</td>
+    <td align="center">70 fps</td>
+    <td align="center">138 ms</td>
+    <td align="center">30.2 ms</td>
+    <td align="center">33 fps</td>
+    <td align="center">274 ms</td>
+    <td align="center">149 ms</td>
+    <td align="center">6.7 fps</td>
+  </tr>
+  <tr>
+    <td><i>Piecewise Aff. (~23,000 Tri.)</i></td>
+    <td align="center">1.16 s</td>
+    <td align="center">162 ms</td>
+    <td align="center">6.15 fps</td>
+    <td align="center">1.16 s</td>
+    <td align="center">75 ms</td>
+    <td align="center">13.3 fps</td>
+    <td align="center">1.47 s</td>
+    <td align="center">435 ms</td>
+    <td align="center">2.3 fps</td>
+  </tr>
+  <tr>
+    <td colspan="10" align="center"><b>CSS Transform Calculation</b></td>
+  </tr>
+  <tr>
+    <td>Transform</td>
+    <td colspan="3" align="center"><i>First Frame</i></td>
+    <td colspan="3" align="center"><i>Rest of Frames</i></td>
+    <td colspan="3" align="center"><i>Frame Rate</i></td>
+  </tr>
+  <tr>
+    <td>Affine</td>
+    <td colspan="3">21 ms</td>
+    <td colspan="3">0.0104 ms</td>
+    <td colspan="3">96,200.10 fps</td>
+  </tr>
+  <tr>
+    <td>Projective</td>
+    <td colspan="3">22 ms</td>
+    <td colspan="3">0.025 ms</td>
+    <td colspan="3">40,536.71 fps</td>
   </tr>
 </tbody>
 </table>
