@@ -1,6 +1,6 @@
 
 # <img src="./Documentation/HomographyJSLogoWhite.svg" height=25px> Homography.js
-<img src="./Documentation/HomographyJSLogo.svg" width="20%" align="left"> Homography.js is a lightweight high-performance library for implementing image homographies in Javascript. It is designed to be easy-to-use (even for developers that are not familiar with Computer Vision), and able to run in real time applications even in low-spec devices such as smartphones.
+<img src="./Documentation/HomographyJSLogo.svg" width="20%" align="left"> Homography.js is a lightweight high-performance library for implementing image homographies in Javascript. It is designed to be easy-to-use (even for developers that are not familiar with Computer Vision), and able to execute in real time applications (even in low-spec devices such as budget smartphones).
 <br/>
 <br/>
 <br/>
