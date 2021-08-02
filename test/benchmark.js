@@ -8,32 +8,39 @@ testImg.src = './testImg.png'
 testImg.onload = () => runTests();
 
 
-function runTests(){
+async function runTests(){
+    
     addTitle("Piecewise Performance To Same Width")
-    test2Faces(false, 10000, w, h);
-    test2Faces(false, 10000, w/2, h/2);
-    test2Faces(false, 10000, w*2, h*2);
-    //test2Faces(true, 10, w, h);       
+    test2Faces(false, 1000, w, h);
+    test2Faces(false, 1000, w/2, h/2);
+    test2Faces(false, 1000, w*2, h*2);
 
-    testNFaces(false, 10000, 20, 10, w, h);
-    testNFaces(false, 10000, 20, 10, w/2, h/2);
-    testNFaces(false, 10000, 20, 10, w*2, h*2);
-    //testNFaces(true, 100, 20, 10, w*0.7, h*0.7);
+    testNFaces(false, 1000, 20, 10, w, h);
+    testNFaces(false, 1000, 20, 10, w/2, h/2);
+    testNFaces(false, 1000, 20, 10, w*2, h*2);
 
-    testNFaces(false, 10000, 160, 80, w, h);
-    testNFaces(false, 10000, 160, 80, w/2, h/2);
-    testNFaces(false, 10000, 160, 80, w*2, h*2);
-    //testNFaces(true, 10, 160, 80, w, h);
+    testNFaces(false, 1000, 160, 80, w, h);
+    testNFaces(false, 1000, 160, 80, w/2, h/2);
+    testNFaces(false, 1000, 160, 80, w*2, h*2);
 
     addTitle("Affine Transforms");
-    testAffine(false, 10000, w, h);
-    testAffine(false, 10000, w/2, h/2);
-    testAffine(false, 10000, w*2, h*2);
+    testAffine(false, 1000, w, h);
+    testAffine(false, 1000, w/2, h/2);
+    testAffine(false, 1000, w*2, h*2);
 
     addTitle("Projective Transforms");
-    testProjective(false, 10000, w, h);
-    testProjective(false, 10000, w/2, h/2);
-    testProjective(false, 10000, w*2, h*2);
+    testProjective(false, 1000, w, h);
+    testProjective(false, 1000, w/2, h/2);
+    testProjective(false, 1000, w*2, h*2);
+
+    addTitle("To CSS");
+    testAffineToCSS(false, 100000, w, h);
+    testAffineToCSS(false, 100000, w/2, h/2);
+    testAffineToCSS(false, 100000, w*2, h*2);
+
+    testProjectiveToCSS(false, 100000, w, h);
+    testProjectiveToCSS(false, 100000, w/2, h/2);
+    testProjectiveToCSS(false, 100000, w*2, h*2);
 
 }
 
@@ -344,6 +351,162 @@ function testProjective(print=true, framesToAverage = 1000, outputWidth = w, out
         addTitle(`PERFORMANCE WITHOUT CANVAS RENDERING. 
         Shape: ${w}x${h} To ${outputWidth}x${outputHeight} - 
         Avg Trasnformation Time:  ${timeInSeconds.toFixed(4)} s (${(1/timeInSeconds).toFixed(2)} FPS) [First Frame: ${((firstEnd-first)/1000).toFixed(3)} s]`)
+    }
+    
+}
+
+function testAffineToCSS(print=true, framesToAverage = 1000, outputWidth = w, outputHeight=h){
+    // Points are given normalized    
+    const squarePoints = [[0, 0], [0, h], [w, 0]];
+    const dstPoints = [[0, outputHeight/2], [outputWidth/2, outputHeight*8/10], [outputWidth/2, 0]];
+    let canvasContext;
+    if(print){
+        canvasContext = createCanvasContext(`PERFORMANCE INCLUDING CANVAS RENDERINGS.
+                                                                                    `, Math.max(outputWidth, w), Math.max(outputHeight, h));
+        canvasContext.drawImage(testImg, 0, 0, w, h);
+        canvasContext.fill();
+    }
+    // ----------- Create the first transform ---------------
+    const first = performance.now();
+    // Don't set the width and height from the beginning
+    const identityHomography = new Homography("affine");
+    identityHomography.setSourcePoints(squarePoints, testImg, w, h, false);    
+    identityHomography.setDestinyPoints(dstPoints, false);
+    // Sets the image jst before the warping
+    // Call the warping without any image
+    let result = identityHomography.getTransformationMatrixAsCSS();
+    const firstEnd = performance.now();
+    if (print){
+        drawPointsInCanvas(squarePoints, canvasContext, 0);
+    }
+    // ------- Add the first transform time ------------
+    // Create all the future transforms reference points
+    const cycleEvery = 3;
+    const movementArray = [[0, 0], [0, (outputHeight/10)/cycleEvery], [0, 0]];
+    const pointsLength = dstPoints.flat().length;
+    let allSequenceDstPoints = new Float32Array(framesToAverage*dstPoints.flat().length);
+    for(let i = 0; i<framesToAverage; i++){
+        for (let point = 0; point<dstPoints.length; point++){
+            const [srcX, srcY] = dstPoints[point];
+            const [movementX, movementY] = movementArray[point];
+            const cycleStep = i%cycleEvery;
+            //Increment Step
+            if (((~~(i/cycleEvery))%2) === 0){
+                allSequenceDstPoints[i*pointsLength+point*2] = srcX+movementX*cycleStep;
+                allSequenceDstPoints[i*pointsLength+point*2+1] = srcY+movementY*cycleStep;
+            //DecrementStep
+            } else {
+                allSequenceDstPoints[i*pointsLength+point*2] = srcX+movementX*cycleEvery-(movementX*cycleStep);
+                allSequenceDstPoints[i*pointsLength+point*2+1] = srcY+movementY*cycleEvery-(movementY*cycleStep);
+            }
+
+        }
+    }
+
+    // ----------- Measure the time the take -------------
+    const bucleTimeStart = performance.now()
+    if(print){
+        canvasContext.clearRect(w+padBetweenImgs, 0, Math.max(outputWidth, w), Math.max(outputHeight, h))
+        for (let i = 0; i<framesToAverage; i++){
+            identityHomography.setDestinyPoints(allSequenceDstPoints.subarray(i*pointsLength, (i+1)*pointsLength), false);
+            result = identityHomography.warp();    
+            canvasContext.clearRect(w+padBetweenImgs, 0, result.width, result.height)
+            canvasContext.putImageData(result, w+padBetweenImgs, 0);
+            canvasContext.fill();
+            }
+    } else {
+        for (let i = 0; i<framesToAverage; i++){
+            identityHomography.setDestinyPoints(allSequenceDstPoints.subarray(i*pointsLength, (i+1)*pointsLength), false);
+            result = identityHomography.getTransformationMatrixAsCSS();
+        } 
+    }
+    const bucleTimeEnd = performance.now();
+    const timeInSeconds = ((bucleTimeEnd-bucleTimeStart)/1000)/framesToAverage;
+    if (print){
+        addToTitle(`Shape: ${w}x${h} To ${outputWidth}x${outputHeight} - 
+            Avg Trasnformation Time:  ${timeInSeconds.toFixed(4)} s (${(1/timeInSeconds).toFixed(2)} FPS) [First Frame: ${((firstEnd-first)/1000).toFixed(3)} s]`)
+    } else {
+        addTitle(`PERFORMANCE TO CSS. 
+        Shape: ${w}x${h} To ${outputWidth}x${outputHeight} - 
+        Avg Trasnformation Time:  ${timeInSeconds.toFixed(8)} s (${(1/timeInSeconds).toFixed(2)} FPS) [First Frame: ${((firstEnd-first)/1000).toFixed(3)} s]`)
+    }
+    
+}
+
+function testProjectiveToCSS(print=true, framesToAverage = 1000, outputWidth = w, outputHeight=h){
+    // Points are given normalized    
+    const squarePoints = [[0, 0], [0, h], [w, 0], [w, h]];
+    const dstPoints = [[outputWidth/10, 0], [outputWidth/10, outputHeight], [outputWidth, outputHeight*2/8], [outputWidth, outputHeight*6/8]];
+    let canvasContext;
+    if(print){
+        canvasContext = createCanvasContext(`PERFORMANCE INCLUDING CANVAS RENDERINGS.
+                                                                                    `, Math.max(outputWidth, w), Math.max(outputHeight, h));
+        canvasContext.drawImage(testImg, 0, 0, w, h);
+        canvasContext.fill();
+    }
+    // ----------- Create the first transform ---------------
+    const first = performance.now();
+    // Don't set the width and height from the beginning
+    const identityHomography = new Homography("projective");
+    identityHomography.setSourcePoints(squarePoints, testImg, w, h, false);    
+    identityHomography.setDestinyPoints(dstPoints, false);
+    // Sets the image jst before the warping
+    // Call the warping without any image
+    let result = identityHomography.getTransformationMatrixAsCSS();
+    const firstEnd = performance.now();
+    if (print){
+        drawPointsInCanvas(squarePoints, canvasContext, 0);
+    }
+    // ------- Add the first transform time ------------
+    // Create all the future transforms reference points
+    const cycleEvery = 10;
+    const movementArray = [[0, 0], [0, 0], [0, -(outputHeight*1/8)/cycleEvery], [0, (outputHeight*1/8)/cycleEvery]];
+    const pointsLength = dstPoints.flat().length;
+    let allSequenceDstPoints = new Float32Array(framesToAverage*dstPoints.flat().length);
+    for(let i = 0; i<framesToAverage; i++){
+        for (let point = 0; point<dstPoints.length; point++){
+            const [srcX, srcY] = dstPoints[point];
+            const [movementX, movementY] = movementArray[point];
+            const cycleStep = i%cycleEvery;
+            //Increment Step
+            if (((~~(i/cycleEvery))%2) === 0){
+                allSequenceDstPoints[i*pointsLength+point*2] = srcX+movementX*cycleStep;
+                allSequenceDstPoints[i*pointsLength+point*2+1] = srcY+movementY*cycleStep;
+            //DecrementStep
+            } else {
+                allSequenceDstPoints[i*pointsLength+point*2] = srcX+movementX*cycleEvery-(movementX*cycleStep);
+                allSequenceDstPoints[i*pointsLength+point*2+1] = srcY+movementY*cycleEvery-(movementY*cycleStep);
+            }
+
+        }
+    }
+
+    // ----------- Measure the time the take -------------
+    const bucleTimeStart = performance.now()
+    if(print){
+        canvasContext.clearRect(w+padBetweenImgs, 0, Math.max(outputWidth, w), Math.max(outputHeight, h))
+        for (let i = 0; i<framesToAverage; i++){
+            identityHomography.setDestinyPoints(allSequenceDstPoints.subarray(i*pointsLength, (i+1)*pointsLength), false);
+            result = identityHomography.warp();    
+            canvasContext.clearRect(w+padBetweenImgs, 0, result.width, result.height)
+            canvasContext.putImageData(result, w+padBetweenImgs, 0);
+            canvasContext.fill();
+            }
+    } else {
+        for (let i = 0; i<framesToAverage; i++){
+            identityHomography.setDestinyPoints(allSequenceDstPoints.subarray(i*pointsLength, (i+1)*pointsLength), false);
+            result = identityHomography.getTransformationMatrixAsCSS();
+        } 
+    }
+    const bucleTimeEnd = performance.now();
+    const timeInSeconds = ((bucleTimeEnd-bucleTimeStart)/1000)/framesToAverage;
+    if (print){
+        addToTitle(`Shape: ${w}x${h} To ${outputWidth}x${outputHeight} - 
+            Avg Trasnformation Time:  ${timeInSeconds.toFixed(4)} s (${(1/timeInSeconds).toFixed(2)} FPS) [First Frame: ${((firstEnd-first)/1000).toFixed(3)} s]`)
+    } else {
+        addTitle(`PERFORMANCE TO CSS. 
+        Shape: ${w}x${h} To ${outputWidth}x${outputHeight} - 
+        Avg Trasnformation Time:  ${timeInSeconds.toFixed(6)} s (${(1/timeInSeconds).toFixed(2)} FPS) [First Frame: ${((firstEnd-first)/1000).toFixed(3)} s]`)
     }
     
 }
