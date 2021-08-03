@@ -161,7 +161,7 @@ function test5(){
     addSecondsToTitle((s1-s0)/1000)
     img.then(((img) => {canvasContext.drawImage(img, w+padBetweenImgs, 0, result.width, result.height);
                         canvasContext.fill();
-                        drawPointsInCanvas(dstPoints, canvasContext, w+padBetweenImgs, identityHomography._triangles, 4);}))
+                        /*drawPointsInCanvas(dstPoints, canvasContext, w+padBetweenImgs, identityHomography._triangles, 4);*/}))
 }
 
 function test6(){
