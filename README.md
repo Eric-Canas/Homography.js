@@ -1,12 +1,7 @@
 
-# <img src="./Documentation/HomographyJSLogoWhite.svg" height=25px> Homography.js
-<img src="./Documentation/HomographyJSLogo.svg" width="20%" align="left"> Homography.js is a lightweight high-performance library for implementing image homographies in Javascript. It is designed to be easy-to-use (even for developers that are not familiar with Computer Vision), and able to execute in real time applications (even in low-spec devices such as budget smartphones).
-<br/>
-<br/>
-<br/>
-<br/>
-<br/>
-<br/>
+# <img src="./Documentation/HomographyJSLogoWhite.png" height=25px> Homography.js
+<img src="./Documentation/HomographyJSLogo.png" width="20%" align="left"> Homography.js is a lightweight [high-performance](#performance) library for implementing homographies in Javascript. It is designed to be easy-to-use (even for developers that are not familiar with Computer Vision), and able to run in real time applications (even in low-spec devices such as budget smartphones). It allows you to perform <a href="https://en.wikipedia.org/wiki/Affine_transformation" target="_blank">Affine</a>, <a href="https://en.wikipedia.org/wiki/Homography" target="_blank">Projective</a> or <a href="https://en.wikipedia.org/wiki/Piecewise_linear_function" target="_blank">Piecewise Affine</a> warpings over any Image or <code>HTMLElement</code> in your application by only setting a small set of reference points. Additionally, Image warpings can be made persistent (independent of any CSS property), so they can be easily drawn in a canvas, mixed or downloaded. Homography.js is built in a way that frees the user from all the pain-in-the-ass details of homography operations, such as thinking about output dimensions, input coordinate ranges or having to deal with unexpected shifts, pads, crops or unfilled pixels in the output image.
+
 ## Features
 
 
