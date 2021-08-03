@@ -12,7 +12,7 @@
 </ul>
 
 ## Usage
-Perform a basic Piecewise Affine Transform from four source points.
+Perform a basic <b>Piecewise Affine Transform</b> from four source points.
 ```js
     // Select the image you want to warp
     const image = document.getElementById("myImage");
@@ -27,7 +27,29 @@ Perform a basic Piecewise Affine Transform from four source points.
     homography.setReferencePoints(srcPoints, dstPoints);
     // Warp your image
     const resultImage = homography.warp(image);
+    ...
 ```
+
+<p align="center"><img src="./Documentation/exampleImages/PiecewiseAffineExampleSimple.PNG" width="50%"></p>
+
+Perform a complex <b>Piecewise Affine Transform</b> from a large set of <code>pointsInY * pointsInX</code> reference points.
+```js
+    ...
+    // Define a set of reference points that match to a sinusoidal form.
+    let srcPoints = [], dstPoints = [];
+    for (let y = 0; y <= h; y+=h/pointsInY){
+        for (let x = 0; x <= w; x+=w/pointsInX){
+            srcPoints.push([x, y]); // Add (x, y) as source points
+            dstPoints.push([x, amplitude+y+Math.sin((x*n)/Math.PI)*amplitude]); // Apply sinus function on y (with a given amplitude).
+        }    
+    }
+    // Set the reference points (reuse the previous Homography object)
+    homography.setReferencePoints(srcPoints, dstPoints);
+    // Warp your image. As not image is given, it will reuse the one used for the previous example.
+    const resultImage = homography.warp();
+    
+```
+<p align="center"><img src="./Documentation/exampleImages/PiecewiseAffineExampleSinusoidal.PNG" width="80%"></p>
 <h2 id="performance">Performance</h2>
 Benchmark results for every kind of transformation.
 <ul>
