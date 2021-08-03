@@ -11,6 +11,9 @@
   <li>Avoid warping delays in real-time applications due to its design focused on <a href="#performance">High-Performance</a>.</li>
 </ul>
 
+## Installation
+
+
 ## Usage
 Perform a basic <b>Piecewise Affine Transform</b> from four source points.
 ```js
@@ -109,7 +112,7 @@ for(let movement = 0; movement<movements.length; movement++){
 }
 ```
 <i>*Just take attention to the use of <code>setSourcePoints(srcPoints)</code>, <code>setImage(inputImg)</code>, <code>setDestinyPoints(dstPoints)</code> and <code>warp()</code>. The rest of code is just to generate coherent sequence of destiny points and drawing the results</i>
-
+<p align="center"><img src="./Documentation/exampleImages/ProjectiveTransformVideo.gif" width="30%"></p>
 
 
 <h2 id="performance">Performance</h2>
