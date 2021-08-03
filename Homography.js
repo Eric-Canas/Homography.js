@@ -404,7 +404,12 @@ class Homography {
                 break;
         }
         // Transform it from the Uint8ClampedArray flat form (better performance for calculating) to the ImageData form (more conve for the user).
-        output_img = new ImageData(output_img, this._objectiveWidth, this._objectiveHeight);
+        if (this._objectiveWidth*this._objectiveHeight >= 1 && !isNaN(this._objectiveWidth*this._objectiveHeight)){
+            output_img = new ImageData(output_img, this._objectiveWidth, this._objectiveHeight);
+        } else {
+            //Just avoid to break when the transform produces a 0 shape image.
+            output_img = new ImageData(new Uint8ClampedArray(4), 1,1);
+        }
         if (asHTMLPromise)
             return this.HTMLImageElementFromImageData(output_img);
         else 
