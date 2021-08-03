@@ -357,28 +357,27 @@ function testCSS1(){
     let div = document.createElement('div');
     div.style.width = '80%';
     let h1 = document.createElement('h1');
-    h1.textContent = 'Using transformation matrix in a Text Box';
+    h1.textContent = 'Affine Transform on Text Box';
     h1.style.textAlign = 'center';
     div.appendChild(h1);
     let inputText = document.createElement('textarea');
     inputText.rows = 5;
-    inputText.cols = 20;
+    inputText.cols = 10;
     inputText.textContent = '\n\nHello World!'
     inputText.style.textAlign = 'center';
     inputText.style.position = 'relative';
     inputText.style.display = 'block';
     inputText.style.margin = '0 auto';
+    inputText.style.width = '40%';
+    inputText.style.fontSize = '28px';
     div.appendChild(inputText);
     document.body.appendChild(div);
     const s0 = performance.now();
-    const identityHomography = new Homography("affine");
+    const identityHomography = new Homography("auto");
     // Sets the width - height from the very beginning, with non normalized coordinates
-    identityHomography.setSourcePoints(squarePoints);
-    // Don't set the image until the warping
-    identityHomography.setDestinyPoints(rectanglePoints);
-    identityHomography.transformHTMLElement(inputText);
+    identityHomography.transformHTMLElement(inputText, squarePoints, rectanglePoints);
     const s1 = performance.now();
-    h1.textContent += ` [Estimated in ${((s1-s0)/1000).toFixed(4)} s]`;
+    h1.textContent += ` [${((s1-s0)/1000).toFixed(4)} s]`;
 }
 
 function testCSS2(){
