@@ -58,20 +58,17 @@ function test2(){
     // Points are given normalized
     const squarePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
     const dstPoints = [[1/5, 1/5], [0, 1/2], [1, 0], [1*6/8, 1*6/8]];
-    let canvasContext = createCanvasContext("Transforming both triangles of the square")
+    let canvasContext = createCanvasContext("Piecewise Affine Transform from 4 reference points")
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
     // Don't set the width and height from the beginning
     const identityHomography = new Homography("piecewiseaffine");
     // But sets it when source points
-    identityHomography.setSourcePoints(squarePoints, null);
-    // Don't set any objective width
-    identityHomography.setDestinyPoints(dstPoints);
-    identityHomography.setImage(testImg);
+    identityHomography.setReferencePoints(squarePoints, dstPoints);
     // Sets the image jst before the warping
     // Call the warping without any image
-    const result = identityHomography.warp();
+    const result = identityHomography.warp(testImg);
     const img = identityHomography.HTMLImageElementFromImageData(result, true);
     const s1 = performance.now();
     addSecondsToTitle((s1-s0)/1000)
@@ -134,15 +131,15 @@ function test4(){
 }
 
 function test5(){
-    let srcPoints = [];
-    let dstPoints = [];
+    let srcPoints = [], dstPoints = [];
     const pointsInX = 20;
     const pointsInY = 10;
     const amplitude = 20;
+    const n = 8;
     for (let y = 0; y <= h; y+=h/pointsInY){
         for (let x = 0; x <= w; x+=w/pointsInX){
             srcPoints.push([x, y]);
-            dstPoints.push([x, amplitude+y+Math.sin((x*8)/Math.PI)*amplitude]);
+            dstPoints.push([x, amplitude+y+Math.sin((x*n)/Math.PI)*amplitude]);
         }    
     }
     let canvasContext = createCanvasContext("Sinus", w, h+amplitude*2)
