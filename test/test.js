@@ -142,18 +142,19 @@ function test5(){
             dstPoints.push([x, amplitude+y+Math.sin((x*n)/Math.PI)*amplitude]);
         }    
     }
-    let canvasContext = createCanvasContext("Sinus", w, h+amplitude*2)
+    let canvasContext = createCanvasContext("Piecewise Affine Sinusoidal Transform", w, h+amplitude*2)
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
-    const s0 = performance.now();
     // Don't set the width and height at any moment
     const identityHomography = new Homography("piecewiseaffine", w, h);
+    identityHomography.setImage(testImg);
+    const s0 = performance.now();
     // And sets the image togheter with
     identityHomography.setSourcePoints(srcPoints);
     // Don't set any width or height in any moment
     identityHomography.setDestinyPoints(dstPoints);
     // Call the warping without any image
-    const result = identityHomography.warp(testImg);
+    const result = identityHomography.warp();
     const img = identityHomography.HTMLImageElementFromImageData(result, true);
     const s1 = performance.now();
     drawPointsInCanvas(srcPoints, canvasContext, 0, identityHomography._triangles, 4);
@@ -504,7 +505,7 @@ function drawPointsInCanvas(points, canvasContext, xOffset, triangles = null, ra
         }
     }
 }
-function drawSegment(context, [ax, ay], [bx, by], xOffset = 0, color='green', lineWidth=2) {
+function drawSegment(context, [ax, ay], [bx, by], xOffset = 0, color='green', lineWidth=1) {
     context.beginPath();
     context.moveTo(ax+xOffset, ay);
     context.lineTo(bx+xOffset, by);
