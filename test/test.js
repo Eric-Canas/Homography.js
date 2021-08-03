@@ -357,7 +357,7 @@ function testCSS1(){
     let div = document.createElement('div');
     div.style.width = '80%';
     let h1 = document.createElement('h1');
-    h1.textContent = 'Affine Transform on Text Box';
+    h1.textContent = 'Affine Transform in a Text Box';
     h1.style.textAlign = 'center';
     div.appendChild(h1);
     let inputText = document.createElement('textarea');
