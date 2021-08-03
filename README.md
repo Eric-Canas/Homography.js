@@ -48,6 +48,7 @@ Perform a complex <b>Piecewise Affine Transform</b> from a large set of <code>po
     homography.setReferencePoints(srcPoints, dstPoints);
     // Warp your image. As not image is given, it will reuse the one used for the previous example.
     const resultImage = homography.warp();
+    ...
     
 ```
 <p align="center"><img src="./Documentation/exampleImages/PiecewiseAffineExampleSinusoidal.PNG" width="80%"></p>
@@ -64,8 +65,50 @@ Perform a simple <b>Affine Transform</b> and apply it on a <code>HTMLElement</co
     const homography = new Homography(); // Default transform value is "auto".
     // Apply the transform over an HTMLElement from the DOM.
     identityHomography.transformHTMLElement(document.getElementById("inputText"), squarePoints, rectanglePoints);
+    ...
 ```
 <p align="center"><img src="./Documentation/exampleImages/AffineTransformOnHTMLElement.PNG" width="30%"></p>
+
+Calculate 250 different <b>Projective Transforms</b>, apply them over the same input <code>Image</code> and draw them on a canvas.
+```js
+const ctx = document.getElementById("exampleCanvas").getContext("2d");
+
+// Build the initial reference points (in this case, in image coordinates just for convenience)
+const srcPoints = [[0, 0], [0, h], [w, 0], [w, h]];
+let dstPoints = [[0, 0], [0, h], [w, 0], [w, h]];
+// Create the homography object (it is not necessary to set transform as "projective" as it will be automatically detected)
+const homography = new Homography(); 
+// Set the static parameters of all the transforms sequence (it will improve the performance of subsequent warpings)
+homography.setSourcePoints(srcPoints);
+homography.setImage(inputImg);
+
+// Set the parameters for building the future dstPoints at each frame (5 movements of 50 frames each one)
+const framesPerMovement = 50;
+const movements = [[[0, h/5], [0, -h/5], [0, 0], [0, 0]],
+                   [[w, 0], [w, 0], [-w, 0], [-w, 0]],
+                   [[0, -h/5], [0, h/5], [0, h/5], [0, -h/5]],
+                   [[-w, 0], [-w, 0], [w, 0], [w, 0]],
+                   [[0, 0], [0, 0], [0, -h/5], [0, h/5]]];
+
+for(let movement = 0; movement<movements.length; movement++){
+    for (let step = 0; step<framesPerMovement; step++){
+        // Create the new dstPoints (in Computer Vision applications these points will usually come from webcam detections)
+        for (let point = 0; point<srcPoints.length; point++){
+            dstPoints[point][0] += movements[movement][point][0]/framesPerMovement;
+            dstPoints[point][1] += movements[movement][point][1]/framesPerMovement;
+        }
+        
+        // Update the destiny points and calculate the new warping. 
+        homography.setDestinyPoints(dstPoints);
+        const img = homography.warp(); //No parameters warp will reuse the previously setted image
+        // Clear the canvas and draw the new image (using putImageData instead of drawImage for performance reasons)
+        ctx.clearRect(0, 0, w, h);
+        ctx.putImageData(img, Math.min(dstPoints[0][0], dstPoints[2][0]), Math.min(dstPoints[0][1], dstPoints[2][1]));
+        await new Promise(resolve => setTimeout(resolve, 0.1)); // Just a trick for forcing canvas to refresh
+    }
+}
+```
+<i>*Just take attention to the use of <code>setSourcePoints(srcPoints)</code>, <code>setImage(inputImg)</code>, <code>setDestinyPoints(dstPoints)</code> and <code>warp()</code>. The rest of code is just to generate coherent sequence of destiny points and drawing the results</i>
 
 
 
