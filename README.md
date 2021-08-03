@@ -95,7 +95,7 @@ Performance tests on an Average Desktop PC.
     <td><i>Piecewise Aff. (~23,000 Tri.)</i></td>
     <td align="center">257 ms</td>
     <td align="center">24.3 ms</td>
-    <td align="center">41.17 fps</td>
+    <td align="center">41.2 fps</td>
     <td align="center">228 ms</td>
     <td align="center">11.5 ms</td>
     <td align="center">87.1 fps</td>
@@ -194,7 +194,7 @@ Performance tests on a budget smartphone (a bit destroyed).
     <td align="center">8.5 fps</td>
   </tr>
   <tr>
-    <td><i>Piecewise Affine (360 Tri.)</i></td>
+    <td><i>Piecewise Aff. (360 Tri.)</i></td>
     <td align="center">151 ms</td>
     <td align="center">14.3 ms</td>
     <td align="center">70 fps</td>
