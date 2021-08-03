@@ -35,12 +35,13 @@ Perform a basic <b>Piecewise Affine Transform</b> from four source points.
 Perform a complex <b>Piecewise Affine Transform</b> from a large set of <code>pointsInY * pointsInX</code> reference points.
 ```js
     ...
-    // Define a set of reference points that match to a sinusoidal form.
+    // Define a set of reference points that match to a sinusoidal form. 
+    // In this case in image axis (x : From 0 to width, y : From 0 to height) for convenience.
     let srcPoints = [], dstPoints = [];
-    for (let y = 0; y <= h; y+=h/pointsInY){
-        for (let x = 0; x <= w; x+=w/pointsInX){
+    for (let y = 0; y <= h; y+=height/pointsInY){
+        for (let x = 0; x <= w; x+=width/pointsInX){
             srcPoints.push([x, y]); // Add (x, y) as source points
-            dstPoints.push([x, amplitude+y+Math.sin((x*n)/Math.PI)*amplitude]); // Apply sinus function on y (with a given amplitude).
+            dstPoints.push([x, amplitude+y+Math.sin((x*n)/Math.PI)*amplitude]); // Apply sinus function on y
         }    
     }
     // Set the reference points (reuse the previous Homography object)
@@ -50,6 +51,24 @@ Perform a complex <b>Piecewise Affine Transform</b> from a large set of <code>po
     
 ```
 <p align="center"><img src="./Documentation/exampleImages/PiecewiseAffineExampleSinusoidal.PNG" width="80%"></p>
+
+
+Perform a simple <b>Affine Transform</b> and apply it on a <code>HTMLElement</code>.
+```js
+    ...
+    // Set the reference points from which estimate the transform
+    const srcPoints = [[0, 0], [0, 1], [1, 0]];
+    const dstPoints = [[0, 0], [1/2, 1], [1, 1/8]];
+    
+    // Don't specify the type of transform to apply, so let the library decide it by itself. 
+    const homography = new Homography(); // Default transform value is "auto".
+    // Apply the transform over an HTMLElement from the DOM.
+    identityHomography.transformHTMLElement(document.getElementById("inputText"), squarePoints, rectanglePoints);
+```
+<p align="center"><img src="./Documentation/exampleImages/AffineTransformOnHTMLElement.PNG" width="30%"></p>
+
+
+
 <h2 id="performance">Performance</h2>
 Benchmark results for every kind of transformation.
 <ul>
