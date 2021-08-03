@@ -1,8 +1,12 @@
-/*Unique dependency. If needed it could be avoided in a future. It is only need when using Piecewise Affine Transforms*/
-import Delaunator from 'https://cdn.skypack.dev/delaunator@5.0.0';
+/**
+ * @copyright Eric Cañas 2021.
+ * @author Eric Cañas <elcorreodeharu@gmail.com>
+ * @since 1.0.0
+ * @file Homography.js class. It implements the Homography class, designed for implementing image homographies in Javascript.
+ *       It is designed to be easy-to-use (even for developers that are not familiar with Computer Vision) lightweight and fast,
+ *       in order to execute in real time applications (even in low-spec devices such as budget smartphones).
+ */
 
-const availableTransforms = ['auto', 'piecewiseaffine', 'affine', 'projective'];
-const maxCSSDecimal = 5;
 /**
  * Available types of transforms
  * @typedef {"auto"|"affine"|"piecewiseaffine"|"projective"} Transform
@@ -17,6 +21,13 @@ const maxCSSDecimal = 5;
  * @property {Number}                   maxY    Maximum value of y within the segment. 
  */
 
+/*Unique dependency. If needed it could be avoided in a future. It is only need when using Piecewise Affine Transforms*/
+import Delaunator from 'https://cdn.skypack.dev/delaunator@5.0.0';
+
+const availableTransforms = ['auto', 'piecewiseaffine', 'affine', 'projective'];
+const maxCSSDecimal = 5;
+
+// It is thought for 2D
 const dims = 2;
 // Max allowed width/height in normalized coordinates (just for allowing resizes up to x8)
 const normalizedMax = 8.0;
@@ -106,6 +117,62 @@ class Homography {
         // Allocate some auxiliar memory for avoiding to allocate any new memory during the "piecewiseaffine" matrix calculations 
         this._auxSrcTriangle = new Float32Array(3*dims);
         this._auxDstTriangle = new Float32Array(3*dims);
+    }
+
+    /**
+     * Summary.                     Sets the source and destiny reference points ([[x1, y1], [x2, y2], ...]) of the transform and, optionally,
+     *                              the image that will be transformed.
+     * 
+     * Description.                 Reference points are two sets of 2-D coordinates. Each point [xi, yi], of the source points will be mapped to its correspondent
+     *                              [xi', yi'] in the output image. The rest of coordinates of the image will be interpolated through the geometrical transform estimated
+     *                              from these ones. Calling this function will be equivalent to call setSourcePoints(srcPoints) followed by setDstPoints(dstPoints). For
+     *                              performance reasons, when calling succesive warpings, you should always use one of these two functions if only one set of points is being
+     *                              modified between frames. 
+     * 
+     * @param {ArrayBuffer | Array}  srcPoints      Source points of the transform, given as an ArrayBuffer or Array in the form [x1, y1, x2, y2...]
+     *                                              or [[x1, y1], [x2, y2]...]. These source points should be declared in image coordinates, (x : [0, width],
+     *                                              y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]). To allow rescalings (from x0 to x8),
+     *                                              normalized scale is automatically detected when the points array does not contain any value larger than 8.0.
+     *                                              Coordinates with larger numbers are considered to be in image scale. For avoiding this automatic behaviour use the 
+     *                                              srcPointsAreNormalized paremeter. Please note that, if width and height parameters are setted and points are given in
+     *                                              image coordinates, these image coordinates should be declared in terms of the given width and height, (not in terms
+     *                                              of the original image width/height).
+     * 
+     *  @param {ArrayBuffer | Array} dstPoints      Destiny points of the transform, given as a BufferArray or Array in the form [x1, y1, x2, y2...]
+     *                                              or [[x1, y1], [x2, y2]...]. These source destiny should be declared in image coordinates, (x : [0, width],
+     *                                              y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]). 
+     *                                              To allow rescalings (from x0 to x8), normalized scale is automatically detected when the points array does not
+     *                                              contain any value larger than 8.0. Coordinates with larger numbers are considered to be in image scale.
+     *                                              For avoiding this automatic behaviour use the dstPointsAreNormalized paremeter. NOTE that these destiny points should match
+     *                                              in size with the given sourcePoints.
+     * 
+     * @param {HTMLImageElement}     [image]        Optional source image, that will be warped later. Setting this element here will help to advance some calculations
+     *                                              improving the later warping performance, specially when it is planned to apply multiple transformations (same source points
+     *                                              different destiny points) to the same image. If width and/or height are given image will be internally rescaled previous
+     *                                              to any transformation.
+     * 
+     * @param {Number}               [width]        Optional width of the input image. If given, it will resize the input image to that width. Lower widths will imply faster
+     *                                              transformations at the cost of lower resolution in the output image, while larger widths will produce higher resolution images
+     *                                              at the cost of processing time. If null, it will use the original image width.
+     * 
+     * @param {Number}               [height]       Optional height of the input image. If given, it will resize the input image to that height. Lower heights will imply faster
+     *                                              transformations at the cost of lower resolution in the output image, while larger heights will produce higher resolution images
+     *                                              at the cost of processing time. If null, it will use the original image height.
+     * 
+     * @param {Boolean}  [srcPointsAreNormalized]   Optional boolean determining if the parameter srcPoints is in normalized or in image coordinates. If not given it will be
+     *                                              automatically inferred from the points array.
+     * 
+     * @param {Boolean}  [dstPointsAreNormalized]   Optional boolean determining if the parameter dstPoints is in normalized or in image coordinates. If not given it will be
+     *                                              automatically inferred from the points array.
+     * 
+     */
+     setReferencePoints(srcPoints, dstPoints, image = null, width = null, height = null, srcPointsAreNormalized = null, dstPointsAreNormalized = null){
+        if (typeof(srcPoints) === 'undefined' || typeof(dstPoints) === 'undefined'){
+            throw("Source and Destiny points must be defined when calling setReferencePoints().")
+        }
+        this.setSourcePoints(srcPoints, image, width, height, srcPointsAreNormalized);
+        this.setDestinyPoints(dstPoints, dstPointsAreNormalized)
+        
     }
 
     /**
@@ -403,16 +470,16 @@ class Homography {
      *                              to an element just by executing `<your_element>.style.transform = getTransformationMatrixAsCSS();`. Take into account, that this function will
      *                              not work if transformation selected was "piecewiseaffine" as CSS does not accept Piecewise Affine transforms.
      * 
-     * @param {ArrayBuffer|Array}   [srcPoints]  Optional source points for a new transform, given as a ArrayBuffer or Array in the form [x1, y1, x2, y2, ...]
-     *                                           or [[x1, y1], [x2, y2], ...]. These source points should be declared in pixels coordinates, (x : [0, width],
-     *                                           y : [0, height]) or (preferably for simplicity) in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]).
-     *                                           If no points are given, they should have been setted before through `setSrcPoints(points)`. Remember that you
-     *                                           should give three or four reference points if transform selected is "affine" or "projective" respectively.
+     * @param {ArrayBuffer|Array<Number>}   [srcPoints]  Optional source points for a new transform, given as a ArrayBuffer or Array in the form [x1, y1, x2, y2, ...]
+     *                                                   or [[x1, y1], [x2, y2], ...]. These source points should be declared in pixels coordinates, (x : [0, width],
+     *                                                   y : [0, height]) or (preferably for simplicity) in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]).
+     *                                                   If no points are given, they should have been setted before through `setSrcPoints(points)`. Remember that you
+     *                                                   should give three or four reference points if transform selected is "affine" or "projective" respectively.
      * 
-     * @param {ArrayBuffer|Array}   [dstPoints]  Optional destiny points for a new transform, given as a ArrayBuffer or Array in the form [x1, y1, x2, y2, ...]
-     *                                           or [[x1, y1], [x2, y2], ...]. These destiny points should be declared, for simplicity, in the same range than
-     *                                           the previously given srcPoints and it must be the same amount of dstPoints than srcPoints (as they match one to one).
-     *                                           If no points are given, they should have been setted before through `setDstPoints(points)`.
+     * @param {ArrayBuffer|Array<Number>}   [dstPoints]  Optional destiny points for a new transform, given as a ArrayBuffer or Array in the form [x1, y1, x2, y2, ...]
+     *                                                   or [[x1, y1], [x2, y2], ...]. These destiny points should be declared, for simplicity, in the same range than
+     *                                                   the previously given srcPoints and it must be the same amount of dstPoints than srcPoints (as they match one to one).
+     *                                                   If no points are given, they should have been setted before through `setDstPoints(points)`.
      *  
      * @return {String}             String representation of the transformation matrix, that can be directly applied in to the CSS transform property.
      */
@@ -455,6 +522,32 @@ class Homography {
         }
         return matrix;
     }
+
+    /**
+     * Summary.                       Apply the current Affine or Projective transform over an HTMLElement
+     * 
+     * Description.                   Affine and Projective transforms can be applied on each element that accepts the 'transform' CSS property. Take into account, that this function will
+     *                                not work if transformation selected was "piecewiseaffine" as CSS does not accept Piecewise Affine transforms.
+     * 
+     * @param {HTMLElement}                  element     Element in which to apply the geometric transform.
+     * 
+     * @param {ArrayBuffer|Array<Number>}   [srcPoints]  Optional source points for a the transform, given as a ArrayBuffer or Array in the form [x1, y1, x2, y2, ...]
+     *                                                   or [[x1, y1], [x2, y2], ...]. These source points should be declared in pixels coordinates, (x : [0, width],
+     *                                                   y : [0, height]) or (preferably for simplicity) in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]).
+     *                                                   If no points are given, they should have been setted before through `setSrcPoints(points)` or 
+     *                                                   setReferencePoints(srcPoints, dstPoints). Remember that you should give three or four reference points if transform
+     *                                                   selected is "affine" or "projective" respectively.
+     * 
+     * @param {ArrayBuffer|Array<Number>}   [dstPoints]  Optional destiny points for a the transform, given as a ArrayBuffer or Array in the form [x1, y1, x2, y2, ...]
+     *                                                   or [[x1, y1], [x2, y2], ...]. These source points should be declared in pixels coordinates, (x : [0, width],
+     *                                                   y : [0, height]) or (preferably for simplicity) in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]).
+     *                                                   If no points are given, they should have been setted before through `setDestinyPoints(points)` or 
+     *                                                   setReferencePoints(srcPoints, dstPoints). Remember th.
+     */
+
+     transformHTMLElement(element, srcPoints = null, dstPoints = null){
+        element.style.transform = this.getTransformationMatrixAsCSS(srcPoints, dstPoints);
+     }
 
 
 
@@ -921,18 +1014,18 @@ export {Homography}
  *                              solves these equations for x (x = (y-b)/m). Then, as the triangle is the unique polygon that is always convex, fills the subsection of the y^{th}
  *                              row comprised between the minimum and the maximum x solutions.
  * 
- * @param {ArrayBuffer|Array}   triangle        Three points of the triangle, represented as a flat ArrayBuffer of length 6 ([x1, y1, x2, y2, x3, y3]).
+ * @param {ArrayBuffer|Array<Number>}   triangle        Three points of the triangle, represented as a flat ArrayBuffer of length 6 ([x1, y1, x2, y2, x3, y3]).
  * 
- * @param {Number}              idx             Value for filling up the coordinates of the matrix. It will usually be the index of the triangle in the this._triangles property
- *                                              of the Homography object. But in others settings it could be reused for other purposes like, for example, triangles colorization.
+ * @param {Number}                      idx             Value for filling up the coordinates of the matrix. It will usually be the index of the triangle in the this._triangles property
+ *                                                      of the Homography object. But in others settings it could be reused for other purposes like, for example, triangles colorization.
  *                                        
- * @param {Number}              matrix_width    Width of the trianglesCorrespondencesMatrix. It is necessary since, despite it refers to a 2-dimensional it is being represented as
- *                                              a flat ArrayBuffer.
+ * @param {Number}                      matrix_width    Width of the trianglesCorrespondencesMatrix. It is necessary since, despite it refers to a 2-dimensional it is being represented as
+ *                                                      a flat ArrayBuffer.
  * 
- * @param {Number}              yOffset         Minimum value of y in the source reference points. It is used because, for performance reasons, the "trianglesCorrespondencesMatrix"
- *                                              fits the image without any 0's pad.
+ * @param {Number}                      yOffset         Minimum value of y in the source reference points. It is used because, for performance reasons, the "trianglesCorrespondencesMatrix"
+ *                                                      fits the image without any 0's pad.
  * 
- * @param {ArrayBuffer}         trianglesCorrespondencesMatrix  Matrix to be filled up with the values of "idx", at the coordinates that belongs to the given "triangle".
+ * @param {ArrayBuffer}                 trianglesCorrespondencesMatrix  Matrix to be filled up with the values of "idx", at the coordinates that belongs to the given "triangle".
  * 
  * 
  */
@@ -961,7 +1054,7 @@ function fillTriangle(triangle, idx, matrix_width, yOffset, trianglesCorresponde
  * Description.                 PRIVATE AUXILIAR. For the vertical line cases, m will be defined as Infinite. In these cases the value of x should be directly x = b.
  *                              For horizontal line cases (m = 0) x will have no solution, as there would be infinite solutions for x given an y.
  * 
- * @param {ArrayBuffer|Array}   triangle   Three points of the triangle, represented as a flat ArrayBuffer of length 6 ([x1, y1, x2, y2, x3, y3]).
+ * @param {ArrayBuffer|Array<Number>}   triangle   Three points of the triangle, represented as a flat ArrayBuffer of length 6 ([x1, y1, x2, y2, x3, y3]).
  * 
  * @returns {Array<LineEquations>}         Array with the line equations for each one of the three sides of the triangle, in the form {m, b, minY, maxY}.
  */
@@ -1053,11 +1146,11 @@ function Delaunay(points){
  * Description.                 PRIVATE AUXILIAR. This function does not return the complete transform matrix for the projective case, but only the positions of it that are useful
  *                              for calculating transforms.
  * 
- * @param {Transform}           transform   String indicating the selected transform, that must be "affine" or "projecive".
+ * @param {Transform}                   transform   String indicating the selected transform, that must be "affine" or "projecive".
  * 
- * @param {ArrayBuffer|Array}   srcPoints   Source reference points in the form [x1, y1, x2, y2, ..., xn, yn]. n must be 3 for Affine transforms or 4 for Projective.
+ * @param {ArrayBuffer|Array<Number>}   srcPoints   Source reference points in the form [x1, y1, x2, y2, ..., xn, yn]. n must be 3 for Affine transforms or 4 for Projective.
  * 
- * @param {ArrayBuffer|Array}   dstPoints   Destiny reference points in the form [x1, y1, x2, y2, ..., xn, yn]. n must be the same as in srcPoints.
+ * @param {ArrayBuffer|Array<Number>}   dstPoints   Destiny reference points in the form [x1, y1, x2, y2, ..., xn, yn]. n must be the same as in srcPoints.
  * 
  * @returns {Float32Array}       A Float32Array containing the transform matrix that maps srcPoints to dstPoints. In the case of Projective transform it is not a 4x4 matrix, but an
  *                               Array of length 8 containing only the positions of it that are useful for calculating transforms.
@@ -1083,9 +1176,9 @@ function calculateTransformMatrix(transform, srcPoints, dstPoints){
  * Description.                 PRIVATE AUXILIAR. Although it is not checked here for performance reasons, this function could produce a division between 0 if two points in 
  *                              source or two points in destiny are really the identical points.
  * 
- * @param {ArrayBuffer|Array}   srcTriangle   Source reference points in the form [x1, y1, x2, y2, x3, y3].
+ * @param {ArrayBuffer|Array<Number>}   srcTriangle   Source reference points in the form [x1, y1, x2, y2, x3, y3].
  * 
- * @param {ArrayBuffer|Array}   dstTriangle   Destiny reference points in the form [x1, y1, x2, y2, x3, y3]. 
+ * @param {ArrayBuffer|Array<Number>}   dstTriangle   Destiny reference points in the form [x1, y1, x2, y2, x3, y3]. 
  * 
  * @returns {Float32Array}      A Float32Array representing the 2x3 transform matrix that maps srcTriangle to dstTriangle.
  * 
@@ -1138,9 +1231,9 @@ function calculateTransformMatrix(transform, srcPoints, dstPoints){
  * 
  * Description.                 PRIVATE AUXILIAR. It relies on the Linear System solver of numeric.js which is in the Third Party code section at the footer of this file.
  * 
- * @param {ArrayBuffer|Array}   srcSquare   Source reference points in the form [x1, y1, x2, y2, x3, y3, x4, y4].
+ * @param {ArrayBuffer|Array<Number>}   srcSquare   Source reference points in the form [x1, y1, x2, y2, x3, y3, x4, y4].
  * 
- * @param {ArrayBuffer|Array}   dstSquare   Destiny reference points in the form [x1, y1, x2, y2, x3, y3, x4, y4]. 
+ * @param {ArrayBuffer|Array<Number>}   dstSquare   Destiny reference points in the form [x1, y1, x2, y2, x3, y3, x4, y4]. 
  * 
  * @returns {Float32Array}      A Float32Array representing the 2x3 transform matrix that maps srcTriangle to dstTriangle.
  * 
@@ -1262,9 +1355,9 @@ function getTransformFunction(transform){
  *                              be "projective" or "piecewiseaffine". In this case "projective" is selected by default as it is the most common use case. If the amount of points given
  *                              does not match with the selected transform, this function will throw an error.
  *  
- * @param {Transform}           transform   Transform to be checked in the case of ("affine", "projective" or "piecewiseaffine"). In the case of "auto" the transform will be selected.
+ * @param {Transform}                   transform   Transform to be checked in the case of ("affine", "projective" or "piecewiseaffine"). In the case of "auto" the transform will be selected.
  * 
- * @param {ArrayBuffer|Array}   points      Reference points in the form [x1, y1, x2, y2, ..., xn, yn]. 
+ * @param {ArrayBuffer|Array<Number>}   points      Reference points in the form [x1, y1, x2, y2, ..., xn, yn]. 
  * 
  * @returns {Transform}         Input transform if "affine", "projective" or "piecewiseaffine" was given, or selected transform if "auto" was given.
  * 
@@ -1353,9 +1446,9 @@ function calculateTransformLimits(matrix, width, height){
 /**
  * Summary.                     PRIVATE AUXILIAR. Returns True if an array contains a value greater than "value" or 0 if not.
  *  
- * @param {ArrayBuffer|Array}   iterable    An Array containing numeric sortable values (usually numbers).
+ * @param {ArrayBuffer|Array<Number>}   iterable    An Array containing numeric sortable values (usually numbers).
  * 
- * @param {Number}              value       Value to be checked.
+ * @param {Number}                      value       Value to be checked.
  * 
  * @returns {Boolean}           True if the input "iterable" contains any value greater than "value" or false otherwise.
  * 
@@ -1370,10 +1463,10 @@ function containsValueGreaterThan(iterable, value){
 /**
  * Summary.                     PRIVATE AUXILIAR. Returns the minimum and maximum X and Y within an array with the form [x1, y1, x2, y2, ..., xn, yn].
  *  
- * @param {ArrayBuffer|Array}   array       An Array containing a set of x and y coordinates with the form [x1, y1, x2, y2, ..., xn, yn].
+ * @param {ArrayBuffer|Array<Number>}   array       An Array containing a set of x and y coordinates with the form [x1, y1, x2, y2, ..., xn, yn].
  * 
- * @param {Boolean}             rounded     If true return Integer values (default), if false return values as appears in the array. Integer values are usually
- *                                          more convenient when calculating over Image coordinates.
+ * @param {Boolean}                     rounded     If true return Integer values (default), if false return values as appears in the array. Integer values are usually
+ *                                                  more convenient when calculating over Image coordinates.
  * 
  * @returns {Array<Number>}     [minX, minY, maxX, maxY]. Minimum X, minimum Y, maximumX and maximumY found in the array. As integers if rounded is true, or as
  *                              they appear if rounded is false.
@@ -1417,11 +1510,11 @@ function minmaxXYofArray(array, rounded = true){
  * 
  * Description.                 PRIVATE AUXILIAR. NOTE that this function does not return any value, as points are modified in place for performance reasons.
  *  
- * @param {ArrayBuffer|Array}   points    An Array containing a set of x and y coordinates with the form [x1, y1, x2, y2, ..., xn, yn], in a normalized range (usually [0.0, 1.0]).
+ * @param {ArrayBuffer|Array<Number>}   points    An Array containing a set of x and y coordinates with the form [x1, y1, x2, y2, ..., xn, yn], in a normalized range (usually [0.0, 1.0]).
  * 
- * @param {Number}              width     Width of the new range.
+ * @param {Number}                      width     Width of the new range.
  * 
- * @param {Number}              height    Height of the new range.
+ * @param {Number}                      height    Height of the new range.
  * 
  */
 function denormalizePoints(points, width, height){
@@ -1435,11 +1528,11 @@ function denormalizePoints(points, width, height){
  * 
  * Description.                 PRIVATE AUXILIAR. NOTE that this function does not return any value, as points are modified in place for performance reasons.
  *  
- * @param {ArrayBuffer|Array}   points    An Array containing a set of x and y coordinates with the form [x1, y1, x2, y2, ..., xn, yn], in a [0, width] ~ [0, height] range.
+ * @param {ArrayBuffer|Array<Number>}   points    An Array containing a set of x and y coordinates with the form [x1, y1, x2, y2, ..., xn, yn], in a [0, width] ~ [0, height] range.
  * 
- * @param {Number}              width     Width of the old range. Usually the width of the image where the points belongs to.
- * 
- * @param {Number}              height    Height of the old range. Usually the height of the image where the points belongs to.
+ * @param {Number}                      width     Width of the old range. Usually the width of the image where the points belongs to.
+ *
+ * @param {Number}                      height    Height of the old range. Usually the height of the image where the points belongs to.
  * 
  */
 function normalizePoints(points, width, height){

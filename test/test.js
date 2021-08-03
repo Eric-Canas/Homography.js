@@ -4,7 +4,7 @@ const w = 400, h = 400;
 const padBetweenImgs = w/4;
 // Charge testImg
 let testImg = document.createElement('img');
-testImg.src = './testImg.png'
+testImg.src = './testImgLogoBlack.png'
 testImg.onload = () => runTests();
 
 
@@ -41,9 +41,7 @@ function test1(){
 
     const identityHomography = new Homography("piecewiseaffine");
     // Sets the width - height from the very beginning, with non normalized coordinates
-    identityHomography.setSourcePoints(squarePoints);
-    // Don't set the image until the warping
-    identityHomography.setDestinyPoints(squarePointsShifted);
+    identityHomography.setReferencePoints(squarePoints, squarePointsShifted);
     const result = identityHomography.warp(testImg);
     console.log(result)
     const img = identityHomography.HTMLImageElementFromImageData(result, true);
@@ -380,10 +378,9 @@ function testCSS1(){
     identityHomography.setSourcePoints(squarePoints);
     // Don't set the image until the warping
     identityHomography.setDestinyPoints(rectanglePoints);
-    const cssTransform = identityHomography.getTransformationMatrixAsCSS();
+    identityHomography.transformHTMLElement(inputText);
     const s1 = performance.now();
     h1.textContent += ` [Estimated in ${((s1-s0)/1000).toFixed(4)} s]`;
-    inputText.style.transform = cssTransform;
 }
 
 function testCSS2(){
