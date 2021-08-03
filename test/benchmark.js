@@ -11,27 +11,27 @@ testImg.onload = () => runTests();
 async function runTests(){
     
     addTitle("Piecewise Performance To Same Width")
-    test2Faces(false, 1000, w, h);
-    test2Faces(false, 1000, w/2, h/2);
-    test2Faces(false, 1000, w*2, h*2);
+    test2Faces(false, 10, w, h);
+    test2Faces(false, 10, w/2, h/2);
+    test2Faces(false, 10, w*2, h*2);
 
-    testNFaces(false, 1000, 20, 10, w, h);
-    testNFaces(false, 1000, 20, 10, w/2, h/2);
-    testNFaces(false, 1000, 20, 10, w*2, h*2);
+    testNFaces(false, 10, 20, 10, w, h);
+    testNFaces(false, 10, 20, 10, w/2, h/2);
+    testNFaces(false, 10, 20, 10, w*2, h*2);
 
-    testNFaces(false, 1000, 160, 80, w, h);
-    testNFaces(false, 1000, 160, 80, w/2, h/2);
-    testNFaces(false, 1000, 160, 80, w*2, h*2);
+    testNFaces(false, 10, 160, 80, w, h);
+    testNFaces(false, 10, 160, 80, w/2, h/2);
+    testNFaces(false, 10, 160, 80, w*2, h*2);
 
     addTitle("Affine Transforms");
-    testAffine(false, 1000, w, h);
-    testAffine(false, 1000, w/2, h/2);
-    testAffine(false, 1000, w*2, h*2);
+    testAffine(false, 10, w, h);
+    testAffine(false, 10, w/2, h/2);
+    testAffine(false, 10, w*2, h*2);
 
     addTitle("Projective Transforms");
-    testProjective(false, 1000, w, h);
-    testProjective(false, 1000, w/2, h/2);
-    testProjective(false, 1000, w*2, h*2);
+    testProjective(false, 10, w, h);
+    testProjective(false, 10, w/2, h/2);
+    testProjective(false, 10, w*2, h*2);
 
     addTitle("To CSS");
     testAffineToCSS(false, 100000, w, h);
