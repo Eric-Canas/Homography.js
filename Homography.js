@@ -23,15 +23,15 @@
 
 /* Node vs Browser differences. If uploading the code for browser set IS_NODE to false and comment this In Node part. If uploading code for node
     set IS_NODE to true and comment the In JS part. NOTE: I know that it is a very ugly. I will find a better solution soon*/
-const IS_NODE = false;
+const IS_NODE = true;
 // In NODE
-    /*import Delaunator from 'delaunator';
+    import Delaunator from 'delaunator';
     import PNG from 'pngjs2';
     import pkg from 'canvas';
     const {createCanvas, loadImage} = pkg;
-    export {loadImage};*/
+    export {loadImage};
 // In JS
-    import Delaunator from 'https://cdn.skypack.dev/delaunator@5.0.0';
+    //import Delaunator from 'https://cdn.skypack.dev/delaunator@5.0.0';
 
     
 const availableTransforms = ['auto', 'piecewiseaffine', 'affine', 'projective'];
@@ -182,6 +182,8 @@ class Homography {
         if (typeof(srcPoints) === 'undefined' || typeof(dstPoints) === 'undefined'){
             throw("Source and Destiny points must be defined when calling setReferencePoints().")
         }
+        // Set dstPoints as null for avoiding setSourcePoints to calculate a matrix that will turn invalid in the next line
+        this._dstPoints = null; 
         this.setSourcePoints(srcPoints, image, width, height, srcPointsAreNormalized);
         this.setDestinyPoints(dstPoints, dstPointsAreNormalized)
         
@@ -228,6 +230,8 @@ class Homography {
         this._srcPoints = points;
         // Check if it is given in normalized coordinates (if this information is not given by the user).
         this._srcPointsAreNormalized = pointsAreNormalized === null? !containsValueGreaterThan(this._srcPoints, normalizedMax) : pointsAreNormalized;
+        // Trasform matrtix should be erased as srcPoints have changed, thus it turns invalid.
+        this._transformMatrix = null;
 
         // Verifies if the selected transform is coherent with the points array given, or select the best one if 'auto' mode is selected.
         this.transform = checkAndSelectTransform(this.firstTransformSelected, this._srcPoints);
@@ -243,7 +247,15 @@ class Homography {
         } else if (width !== null || height !== null){
             this._setSrcWidthHeight(width, height); //It will denormalize the srcPoints array
         }
-        
+        // Denormalize points if there is enough information for it.
+        if (this._width !== null && this._height !== null && this._srcPointsAreNormalized){
+            denormalizePoints(this._srcPoints, this._width, this._height);
+            this._srcPointsAreNormalized = false;
+        }
+        // If I have the dstPoints setted, try to recalculate the new transform matrix if possible (except for piecewise).
+        if(this._dstPoints !== null && this.transform !== 'piecewise'){
+            this._transformMatrix = calculateTransformMatrix(this.transform, this._srcPoints, this._dstPoints);
+        }
         // In case that no width or height were given, but points were already in image coordinates, the "piecewiseaffine" correspondence matrix is still calculable.
         if (this.transform === 'piecewiseaffine' && this._trianglesCorrespondencesMatrix === null){
             // Unset any previous information about Piecewise Affine auxiliar matrices, as they are not reutilizable when source points are modified.
@@ -337,10 +349,16 @@ class Homography {
 
         // As both source and destiny points are set now, calculate the transformation matrix for whichever the selected transform is
         if (this.transform !== 'piecewiseaffine'){
+            // Denormalize points for the projective case as it needs not normalized ranges
+            if (this._dstPointsAreNormalized && this._width > 0 && this._height > 0 && this.transform === 'projective'){
+                denormalizePoints(this._dstPoints, this._width, this._height);
+                this._dstPointsAreNormalized = false;
+            }
             // Ensure that destiny and source points are in the same range
             this._putSrcAndDstPointsInSameRange();
             // Calculate the projective or the affine transform
             this._transformMatrix = calculateTransformMatrix(this.transform, this._srcPoints, this._dstPoints);
+
        } else {
            // Unset piecewiseMatrices as they turns invalid when dstPoints are changed
            this._piecewiseMatrices = null; 
@@ -429,6 +447,7 @@ class Homography {
             else 
                 return output_img;
         } else {
+            console.log({width: this._objectiveWidth, height: this._objectiveHeight})
             let pngImage = new PNG.PNG({width: this._objectiveWidth, height: this._objectiveHeight})
             pngImage.data = Buffer.from(output_img);
             pngImage.pack();
@@ -610,12 +629,28 @@ class Homography {
             // Resize the hidden canvas if needed, for ensuring that no parts of the images will be lost in the HTMLImageElement->Uint8ClampedArray transformation. 
             if (this._hiddenCanvas.width < this._width) {this._hiddenCanvas.width = this._width;}
             if (this._hiddenCanvas.height < this._height) {this._hiddenCanvas.height = this._height;}
+            if (this.transform === 'projective'){
+                if (this._srcPoints !== null && this._srcPointsAreNormalized){
+                    denormalizePoints(this._srcPoints, this._width, this._height);
+                    this._srcPointsAreNormalized = false;
+                }
+
+                //Denormalize Destiny points
+                if (this._dstPoints !== null && this._dstPointsAreNormalized){
+                    denormalizePoints(this._dstPoints, this._width, this._height);
+                    this._dstPointsAreNormalized = false;
+                }
+                if (this._dstPoints !== null && this._srcPoints !== null){
+                    this._transformMatrix = calculateTransformMatrix(this.transform, this._srcPoints, this._dstPoints);
+                    this._induceBestObjectiveWidthAndHeight();
+                }
+            }
 
             // Resize the image if necessary
             if(this._image !== null && this._HTMLImage !== null){
                 this._image = this._getImageAsRGBAArray(this._HTMLImage);
             }
-
+            
             // Finally if piecewise affine transform set its parameters again as now it is sure that width and height are known
             if (this._srcPoints !== null && this.transform === 'piecewiseaffine'){
                 this._setPiecewiseAffineTransformParameters();
@@ -1181,7 +1216,7 @@ function Delaunay(points){
  *                               Array of length 8 containing only the positions of it that are useful for calculating transforms.
  */
 function calculateTransformMatrix(transform, srcPoints, dstPoints){
-    let matrix;
+    let matrix = null;
     switch(transform){
         case 'affine':
             matrix = affineMatrixFromTriangles(srcPoints, dstPoints);

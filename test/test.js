@@ -326,14 +326,14 @@ function test11(){
 }
 
 function test12(){
-    const perspectivePoints = [[0, 0], [0, h], [w, h*2/10], [w, h*8/10]];
-    const oppositePerspectivePoints = [[0, h*2/10], [0, h*8/10], [w, 0], [w, h]];
+    const perspectivePoints = [[0, 0], [0, 1], [1, 1*2/10], [1, 1*8/10]]//[[0, 0], [0, h], [w, h*2/10], [w, h*8/10]];
+    const oppositePerspectivePoints = [[0, 1*2/10], [0, 1*8/10], [1, 0], [1, 1]]//[[0, h*2/10], [0, h*8/10], [w, 0], [w, h]];
     let canvasContext = createCanvasContext("Opposite Perspective Transform", w, h+h*2/3);
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();
 
-    const identityHomography = new Homography("projective", w, h);
+    const identityHomography = new Homography("projective");
     // Sets the width - height from the very beginning, with non normalized coordinates
     identityHomography.setSourcePoints(perspectivePoints);
     // Don't set the image until the warping
