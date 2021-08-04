@@ -447,7 +447,6 @@ class Homography {
             else 
                 return output_img;
         } else {
-            console.log({width: this._objectiveWidth, height: this._objectiveHeight})
             let pngImage = new PNG.PNG({width: this._objectiveWidth, height: this._objectiveHeight})
             pngImage.data = Buffer.from(output_img);
             pngImage.pack();
@@ -699,7 +698,6 @@ class Homography {
         } else {
             throw ("Trying to calculate a the output width and height of a Piecewise Affine transform but source width and height are not set");
         }
-
         // Finally modify the hidden canvas width and height if needed
         if (this._hiddenCanvas.width < this._objectiveWidth) {this._hiddenCanvas.width = this._objectiveWidth;}
         if (this._hiddenCanvas.height < this._objectiveHeight) {this._hiddenCanvas.height = this._objectiveHeight;}
@@ -1498,7 +1496,7 @@ function calculateTransformLimits(matrix, width, height){
     const xOutputOffset = Math.min(p0_0[0], p1_0[0], p0_1[0], p1_1[0]);
     const yOutputOffset = Math.min(p0_0[1], p0_1[1], p1_0[1], p1_1[1]);
     const outWidth = Math.max(p0_1[0], p1_1[0], p0_0[0], p1_0[0]) - xOutputOffset;
-    const outHeight = Math.max(p1_0[1], p1_1[1], p0_0[1], p0_1[0]) - yOutputOffset;
+    const outHeight = Math.max(p1_0[1], p1_1[1], p0_0[1], p0_1[1]) - yOutputOffset;
     return [Math.round(xOutputOffset), Math.round(yOutputOffset), Math.round(outWidth), Math.round(outHeight)];
 
 }
