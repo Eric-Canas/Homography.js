@@ -1,0 +1,37 @@
+{
+  "name": "homography-js",
+  "version": "1.0.0",
+  "description": "High-Performance library for image homographies",
+  "main": "Homography.js",
+  "type": "module",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "canvas": "^2.8.0",
+    "delaunator": "^5.0.0",
+    "pngjs2": "^2.0.0"
+  },
+  "devDependencies": {
+    "webpack": "^5.48.0",
+    "webpack-cli": "^4.7.2"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eric-Canas/Homography.js.git"
+  },
+  "keywords": [
+    "homography",
+    "computer",
+    "vision"
+  ],
+  "author": "Eric Cañas",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Eric-Canas/Homography.js/issues"
+  },
+  "homepage": "https://github.com/Eric-Canas/Homography.js#readme"
+}

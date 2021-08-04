@@ -381,8 +381,8 @@ function testCSS1(){
 }
 
 function testCSS2(){
-    const perspectivePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
-    const oppositePerspectivePoints = [[0, 0], [0, 1], [0.8, 0.4], [0.95, 1]];
+    const perspectivePoints = [[0, 0], [0, 100], [100, 0], [100, 100]];
+    const oppositePerspectivePoints = [[0, 0], [0, 100], [100, 10], [100, 100]];
     // Build he elements
     let div = document.createElement('div');
     div.style.width = '80%';

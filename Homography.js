@@ -21,9 +21,19 @@
  * @property {Number}                   maxY    Maximum value of y within the segment. 
  */
 
-/*Unique dependency. If needed it could be avoided in a future. It is only need when using Piecewise Affine Transforms*/
-import Delaunator from 'https://cdn.skypack.dev/delaunator@5.0.0';
+/* Node vs Browser differences. If uploading the code for browser set IS_NODE to false and comment this In Node part. If uploading code for node
+    set IS_NODE to true and comment the In JS part. NOTE: I know that it is a very ugly. I will find a better solution soon*/
+const IS_NODE = false;
+// In NODE
+    /*import Delaunator from 'delaunator';
+    import PNG from 'pngjs2';
+    import pkg from 'canvas';
+    const {createCanvas, loadImage} = pkg;
+    export {loadImage};*/
+// In JS
+    import Delaunator from 'https://cdn.skypack.dev/delaunator@5.0.0';
 
+    
 const availableTransforms = ['auto', 'piecewiseaffine', 'affine', 'projective'];
 const maxCSSDecimal = 5;
 
@@ -31,9 +41,6 @@ const maxCSSDecimal = 5;
 const dims = 2;
 // Max allowed width/height in normalized coordinates (just for allowing resizes up to x8)
 const normalizedMax = 8.0;
-
-
-
 
 class Homography {
     /**
@@ -92,10 +99,15 @@ class Homography {
         this.firstTransformSelected = transform.toLowerCase();
         this.transform = transform.toLowerCase();
         // Build the hidden canvas that will help to convert HTMLImageElements to flat Uint8 Arrays
-        this._hiddenCanvas = document.createElement('canvas');
+        this._hiddenCanvas = null;
+        if (IS_NODE){
+            this._hiddenCanvas = createCanvas();
+        } else {
+            this._hiddenCanvas = document.createElement('canvas');
+            this._hiddenCanvas.style.display = 'hidden';
+        }
         this._hiddenCanvas.width = width;
         this._hiddenCanvas.height = height;
-        this._hiddenCanvas.style.display = 'hidden';
         this._hiddenCanvasContext = this._hiddenCanvas.getContext("2d");
         // Sets the internal variables for the current image to null
         this._HTMLImage = null;
@@ -258,17 +270,18 @@ class Homography {
      *                              coming from a videoStream. This performance improvement will specially highligth for the "piecewiseaffine" transform,
      *                              as it is the one that is more computationally expensive.
      * 
-     * @param {HTMLImageElement}  image    Image that will internally saved for future warping (warp()).
+     * @param {HTMLImageElement}  image    Image that will internally saved for future warping (warp()). As an HTMLImageElement if running on the browser,
+     *                                     or as the output of `await loadImage('<path-to-image>')` if running in node.
      * 
-     * @param {Number}            [width]  Optional width. Resizes the input image to the given width. If not provided, original image width will be used
-     *                                     (widths lowers than the original image width will improve speed at cost of resolution). It is not recommended
-     *                                     to set widths below the expected output width, since at this point the speed improvement will dissapear and
-     *                                     only resolution will be worsen.
+     * @param {Number}                   [width]  Optional width. Resizes the input image to the given width. If not provided, original image width will be used
+     *                                            (widths lowers than the original image width will improve speed at cost of resolution). It is not recommended
+     *                                            to set widths below the expected output width, since at this point the speed improvement will dissapear and
+     *                                            only resolution will be worsen.
      * 
-     * @param {Number}            [height] Optional height. Resizes the input image to the given height. If not provided, original image height will be used
-     *                                     (heights lowers than the original image height will improve speed at cost of resolution). It is not recommended
-     *                                     to set heights below the expected output height, since at this point the speed improvement will dissapear and
-     *                                     only resolution will be worsen.
+     * @param {Number}                   [height] Optional height. Resizes the input image to the given height. If not provided, original image height will be used
+     *                                            (heights lowers than the original image height will improve speed at cost of resolution). It is not recommended
+     *                                            to set heights below the expected output height, since at this point the speed improvement will dissapear and
+     *                                            only resolution will be worsen.
      * 
      */
     setImage(image, width = null, height = null){
@@ -403,17 +416,24 @@ class Homography {
                 output_img = this._inverseGeometricWarp(this._image);
                 break;
         }
-        // Transform it from the Uint8ClampedArray flat form (better performance for calculating) to the ImageData form (more conve for the user).
-        if (this._objectiveWidth*this._objectiveHeight >= 1 && !isNaN(this._objectiveWidth*this._objectiveHeight)){
-            output_img = new ImageData(output_img, this._objectiveWidth, this._objectiveHeight);
+        if (!IS_NODE){
+            // Transform it from the Uint8ClampedArray flat form (better performance for calculating) to the ImageData form (more conve for the user).
+            if (this._objectiveWidth*this._objectiveHeight >= 1 && !isNaN(this._objectiveWidth*this._objectiveHeight)){
+                output_img = new ImageData(output_img, this._objectiveWidth, this._objectiveHeight);
+            } else {
+                //Just avoid to break when the transform produces a 0 shape image.
+                output_img = new ImageData(new Uint8ClampedArray(4), 1,1);
+            }
+            if (asHTMLPromise)
+                return this.HTMLImageElementFromImageData(output_img);
+            else 
+                return output_img;
         } else {
-            //Just avoid to break when the transform produces a 0 shape image.
-            output_img = new ImageData(new Uint8ClampedArray(4), 1,1);
+            let pngImage = new PNG.PNG({width: this._objectiveWidth, height: this._objectiveHeight})
+            pngImage.data = Buffer.from(output_img);
+            pngImage.pack();
+            return pngImage;
         }
-        if (asHTMLPromise)
-            return this.HTMLImageElementFromImageData(output_img);
-        else 
-            return output_img;
     }
 
     /**
