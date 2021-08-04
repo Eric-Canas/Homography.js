@@ -14,7 +14,8 @@ export {runExample};
 
 
 async function testProjective(testImg){
-    const ctx = document.getElementById("exampleCanvas").getContext("2d");
+    //const ctx = document.getElementById("exampleCanvas").getContext("2d");
+    const button = document.getElementById("myButton");
     // Build the initial reference points (in this case, in image coordinates just for convenience)
     const srcPoints = [[0, 0], [0, h], [w, 0], [w, h]];
     let dstPoints = [[0, 0], [0, h], [w, 0], [w, h]];
@@ -41,11 +42,13 @@ async function testProjective(testImg){
             }
             // Update the destiny points for the new warping. 
             homography.setDestinyPoints(dstPoints);
-            const img = homography.warp()
+            //const img = homography.warp()
+            homography.transformHTMLElement(button)
+            console.log(button)
             // Clear the canvas and draw the new image on the canvas (using putImageData instead of drawImage for performance reasons)
-            ctx.clearRect(0, 0, w, h);
-            ctx.putImageData(img, Math.min(dstPoints[0][0], dstPoints[2][0]), Math.min(dstPoints[0][1], dstPoints[2][1]));
-            await new Promise(resolve => setTimeout(resolve, 0.1)); // Just a trick for forcing the canvas to refresh
+            //ctx.clearRect(0, 0, w, h);
+            //ctx.putImageData(img, Math.min(dstPoints[0][0], dstPoints[2][0]), Math.min(dstPoints[0][1], dstPoints[2][1]));
+            await new Promise(resolve => setTimeout(resolve, 10)); // Just a trick for forcing the canvas to refresh
         }
     }
 

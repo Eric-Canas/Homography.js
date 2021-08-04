@@ -515,7 +515,7 @@ class Homography {
                     for (let dx = 0; dx<4; dx++){
                         if (dy === 2 && dx === 2 || dy === 3 && dx === 3) matrix += `1`;
                         else if( dy === 2 || dx === 2) matrix += `0`;
-                        else matrix += `${this._transformMatrix[i++].toFixed(maxCSSDecimal)}`
+                        else matrix += `${this._transformMatrix[((i++)*3)%8].toFixed(maxCSSDecimal)}`
                         
                         if (dy*4+dx < 4*4-1) matrix += `, `;
                         else matrix += `)`;
