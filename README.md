@@ -173,7 +173,7 @@ Homography is in charge of performing: Affine, Projective or PiecewiseAffine tra
 <ul>
 <li><b>[<i>transform = <code>"auto"</code></i>]</b>: String representing the transformation to be done. One of "auto", "affine", "piecewiseaffine" or "projective":
 <ul>
-  <li> <code>"auto"</code> : Transformation will be automatically selected depending on the inputs given. Just take "auto" if you don't know which kind of transform do you need. This is the default value. </li>
+  <li> <code>"auto"</code>: Transformation will be automatically selected depending on the inputs given. Just take "auto" if you don't know which kind of transform do you need. This is the default value. </li>
   <li><code>"affine"</code> : A geometrical transformation that ensures that all parallel lines of the input image will be parallel in the output image. It will need exactly three source points to be set (and three destiny points). An affine transformation can only be composed by rotations, scales, shearings and reflections. </li>
   <li><code>"piecewiseaffine"</code> : A composition of several affine transforms that allows more complex constructions. This transforms generates a mesh of triangles with the source points and finds an independent affine transformation for each one of them. This way, it allows more complex transformation as, for example, sinusoidal forms. It can take any amount (greater than three) of reference points. When "piecewiseaffine" mode is selected, only the parts of the input image within a triangle will appear on the output image. If you want to ensure that the whole image appears in the output, ensure to set include reference point on each corner of the image. </li>
   <li><code>"projective"</code>: A transformation that shows how the an image change when the point of view of the observer is modified. It takes exactly four source points (and four destiny points). This is the transformation that should be used when looking for perspective modifications. </li>
@@ -184,8 +184,67 @@ Homography is in charge of performing: Affine, Projective or PiecewiseAffine tra
   <li><b>[<i>height</i>]</b>: Optional height of the input image. Same considerations than width.</li>  
 </ul>
 
- ### Homography.setReferencePoints(srcPoints[, image, width, height])
+ ### Homography.setSourcePoints(points[, image, width, height, pointsAreNormalized])
+ 
+Sets the source reference points (<code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>) of the transform and, optionally, the image that will be transformed.  
+Source reference points is a set of 2-D coordinates determined in the input image that will exactly go to the correspondent destiny points coordinates (setted through setDstPoints()) in the output image. The rest of coordinates of the image will be interpolated through the geometrical transform estimated from these ones.
+<ul>
+  <li><b><i>points</i></b> : Source points of the transform, given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. For large set of source points, performance improvements comes when using <code>Float32Array</code>. These source points can be declared in image coordinates, (x : [0, width], y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]). In order to allow transforms with upscalings (from x0 to x8), normalized scale is automatically detected when the points array does not contain any value larger than 8.0. Coordinates with larger numbers are considered to be in image scale (x : [0, width], y : [0, height]). This automatic behaviour can be avoided by using the pointsAreNormalized parameter. Please note that, if width and height parameters are setted and points are given in image coordinates, these image coordinates should be declared in terms of the given width and height, instead of the original image width/height).</li>
+  
+  <li> <b>[<i>image</i>]</b> : Optional source image, that will be warped later. Given as an <code>HTMLImageElement</code>. Setting this element here will help to advance some calculations, improving the later warping performance. Specially when it is planned to apply multiple transformations (same source points but different destiny points) to the same image. If <code>width</code> and/or <code>height</code> are given, the image will be internally rescaled before any transformation. </li>
+  
+  <li><b>[<i>width</i>]</b>: Optional width to which rescale the input image. It is equivalent to the <code>width</code> parameter of the constructor.</li>
+  
+  <li><b>[<i>height</i>]</b>: Optional height to which rescale the input image. It is equivalent to the <code>height</code> parameter of the constructor.</li>
+  
+  <li><b>[<i>pointsAreNormalized</i>]</b>: Optional <code>boolean</code> determining if the parameter points is in normalized or in image coordinates. If not given it will be automatically inferred from the points array.</li>
+</ul>
 
+### Homography.setDestinyPoints(points[, pointsAreNormalized])
+
+Sets the destiny reference points (<code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>) of the transform.  
+<i>Destiny reference points</i> is a set of 2-D coordinates determined for the output image. They must match with the <i>source points</i>, as each <i>source points</i> of the input image will be transformed for going exactly to its correspondent <i>destiny points</i> in the output image. The rest of coordinates of the image will be interpolated through the geometrical transform estimated from these correspondences.
+
+<ul>
+  <li><b><i>points</i></b> : <i>Destiny points</i> of the transform, given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. The amount of <i>source points</i> given must match with the amount of <i>source points</i> that should have been previously setted.</li>
+  
+  <li><b>[<i>pointsAreNormalized</i>]</b>: Optional <code>boolean</code> determining if the parameter points is in normalized or in image coordinates. If not given it will be automatically inferred from the points array.</li>
+</ul>
+
+### Homography.setReferencePoints(srcPoints, dstPoints[, image, width, height, srcpointsAreNormalized, dstPointsAreNormalized])
+
+This function just makes a call to <code>Homography.setSourcePoints(srcPoints[, image, width, height, srcPointsAreNormalized)</code> and then <code>Homography.setDestinyPoints(dstPoints[, dstPointsAreNormalized)</code>. It can be used for convenience when setting <i>reference points</i> for first time, but should be substituted by <code>Homography.setSourcePoints()</code> or <code>Homography.setDestinyPoints()</code> when performing multiple transforms where one of <code>srcPoints</code> or <code>srcPoints</code> remains unchanged, as it would decrease the overall performance.
+
+### Homography.setImage(image [, width, height])
+
+Sets the image that will be transformed when warping.  
+Setting the image before the <i>destiny points</i> (call to <code>setDestinyPoints()</code>) and the <i>warping</i> (call to <code>warp()</code>) will help to advance some calculations as well as to avoid future redundant operations when successive calls to <code>setDestinyPoints()->warp()</code> will occur in the future.
+<ul>
+<li> <b><i>image</i></b> : Source image, that will be warped later. Given as an <code>HTMLImageElement</code>.</li>
+  
+<li><b>[<i>width</i>]</b>: Optional width to which rescale the given image. It is equivalent to the <code>width</code> parameters of the constructor or <code>setSourcePoints()</code>.</li>
+  
+<li><b>[<i>height</i>]</b>: Optional height to which rescale the input image. It is equivalent to the <code>height</code> parameters of the constructor or <code>setSourcePoints()</code>.</li>
+</ul>
+
+### Homography.warp([image, asHTMLPromise = false])
+
+Apply the setted transform to an image.
+Apply the homography to the given or the previously setted image and return it as <code>ImageData</code> or as a <code>Promise<HTMLImageElement></code>. Output image will have enough <code>width</code> and <code>height</code> for enclosing the whole input image without any <i>crop</i> or <i>pad</i>. Any void section of the output image will be transparent. In case that an image is given, it will be internally setted, so any future call to <code>warp()</code> receiving no image parameter will apply the transformation over this image again. Remember that it will transform the whole input image for <code>"affine"</code> and <code>"projective"</code> transforms, while for <code>"piecewiseaffine"</code> transforms it will only transform the parts of the image that can be connected through the given <i>source points</i>. It occurs because <code>"piecewiseaffine"</code> transforms define different <i>Affine</i> transforms for different sections of the input image, so it can not calculate transforms for undefined sections. If you want the whole output image in a <code>"piecewiseaffine"</code> transform you should set a <i>source reference point</i> in each corner of the input image (<code>[[x1, y1], [x2, y2], ..., [0, 0], [0, height], [width, 0], [width, height]]</code>).
+ <ul>
+   <li> <b>[<i>image</i>]</b> : Image that will transformed, given as an <code>HTMLImageElement</code>. If image was already setted through <code>setImage(img)</code> or <code>setSrcPoints(points, img)</code>, this parameter doesn't need to be given again.  If an image is given, it will be internally setted, so any future call to <code>warp()</code> will reuse it. When possible, this reusage of the image will improve the overall performance.</li>
+   <li> <b>[<i>asHTMLPromise = false</i>]</b> : If <code>true</code>, returns a <code>Promise</code> of an <code>HTMLImageElement</code> containing the <i>output image</i>, instead of an <code>ImageData</code> buffer. It could be convenient for some applications, but try to avoid it on critical performance applications as it would decrease its overall performance. If you need to draw it image on a canvas, consider to do it directly through <code>context.putImageData(imgData, x, y)</code>.</li>
+</ul>
+  
+  This function will return the transformed image, without any <i>pad</i> or <i>crop</i> in format <code>ImageData</code> or as a <code>Promise</code> of a <code>HTMLImageElement</code> if <i>asHTMLPromise</i> was set to <code>true</code>.
+
+### Homography.transformHTMLElement(element[, srcPoints, dstPoints])
+Apply the current <i>Affine</i> or <i>Projective</i> transform over an <code>HTMLElement</code>. Applying transform to any <code>HTMLElement</code> will be <a href="#performance">extremely fast<a>.  
+  If <i>srcPoints</i> and <i>dstPoints</i> are given, a new transform will be estimated from them. Take into account, that this function work by modifying the <i>CSS</i> <code>trasform</code> propierty, so it will not work for the <code>"piecewiseaffine"</code> option, as <i>CSS</i> does not support <i>Piecewise Affine</i> transforms.
+<ul>
+  <li> <b><i>element</i></b> : The <code>HTMLElement</code> to which apply the transform. It can be also an <code>HTMLImageElement</code>. In this case, the difference with <code>warp()</code> will be that the transformation will be not persistent, as it will be applied over its current view (as a style) and not to its beneath image data. Usually, it is enough if the image does not need to be drawn in a canvas or to suffer subsequent transformations.</li>
+  </ul>
+  
 <h2 id="performance">Performance</h2>
 Benchmark results for every kind of transformation.
 <ul>
