@@ -1,5 +1,5 @@
 //import {Homography} from '../Homography.js';
-import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@main/Homography.js";
+//import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@v1.0/Homography.js";
 const w = 400, h = 400;
 //console.log(new Homography);
 runExample();
@@ -21,10 +21,10 @@ async function testProjective(testImg){
     const srcPoints = [[0, 0], [0, h], [w, 0], [w, h]];
     let dstPoints = [[0, 0], [0, h], [w, 0], [w, h]];
     // Create the homography object (it is not necessary to set transform as "projective" as it will be automatically detected
-    const homography = new Homography(); 
+    const homo = new homography.Homography(); 
     // Set the static parameters of all the transforms sequence (it will improve the performance of subsequent warpings)
-    homography.setSourcePoints(srcPoints);
-    homography.setImage(testImg);
+    homo.setSourcePoints(srcPoints);
+    homo.setImage(testImg);
 
     // Set the parameters for building the future dstPoints at each frame (5 movements of 50 frames each one)
     const framesPerMovement = 50;
@@ -42,9 +42,9 @@ async function testProjective(testImg){
                 dstPoints[point][1] += movements[movement][point][1]/framesPerMovement;
             }
             // Update the destiny points for the new warping. 
-            homography.setDestinyPoints(dstPoints);
+            homo.setDestinyPoints(dstPoints);
             //const img = homography.warp()
-            homography.transformHTMLElement(button)
+            homo.transformHTMLElement(button)
             console.log(button)
             // Clear the canvas and draw the new image on the canvas (using putImageData instead of drawImage for performance reasons)
             //ctx.clearRect(0, 0, w, h);

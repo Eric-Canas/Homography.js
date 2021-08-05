@@ -2,7 +2,7 @@ module.exports = {
     entry: './Homography.js',
     output : {
         path : __dirname,
-        filename : 'output.js',
+        filename : 'HomographyLightweight.min.js',
         
         library: {
             name : "homography",
