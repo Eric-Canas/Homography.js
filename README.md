@@ -16,6 +16,7 @@
 
 
 ## Usage
+### In the Browser
 Perform a basic <b>Piecewise Affine Transform</b> from four source points.
 ```js
     // Select the image you want to warp
@@ -115,6 +116,29 @@ for(let movement = 0; movement<movements.length; movement++){
 <i>*Just take attention to the use of <code>setSourcePoints(srcPoints)</code>, <code>setImage(inputImg)</code>, <code>setDestinyPoints(dstPoints)</code> and <code>warp()</code>. The rest of code is just to generate coherent sequence of destiny points and drawing the results</i>
 <p align="center"><img src="./Documentation/exampleImages/ProjectiveTransformVideo.gif" width="30%"></p>
 
+### With Node.js
+
+```js
+// Import the Homography class and the loadImage function 
+import { Homography , loadImage} from 'homography-js';
+// Import the file stream just for saving the image in some place when warped
+import fs from 'fs';
+
+// Define the source and destiny points
+const sourcePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
+const dstPoints = [[1/10, 1/2], [0, 1], [9/10, 1/2], [1, 1]];
+// Create the homography object and set the reference points
+const homography = new Homography()
+homography.setReferencePoints(sourcePoints, dstPoints);
+// Here, in backend we can use `await loadImage(<img_path>)` instead of an HTMLImageElement 
+homography.setImage(await loadImage('./testImg.png'));
+// And when warping, we get a pngImage from the 'pngjs2' package instead of an ImageData
+const pngImage = homography.warp();
+// Just for visualizing the results, we write it in a file.
+pngImage.pipe(fs.createWriteStream("transformedImage.png"))
+```
+
+<p align="center"><img src="./Documentation/exampleImages/nodeExampleOutput.png" width="30%"></p>
 
 <h2 id="performance">Performance</h2>
 Benchmark results for every kind of transformation.
