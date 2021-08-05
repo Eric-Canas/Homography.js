@@ -14,7 +14,7 @@
 
 ## Install
 
-Via npm for Node.js (Node module)
+Via npm for <b>Node.js</b> (Node module):
 
 ```js
 $ npm install homography
@@ -22,12 +22,23 @@ $ npm install homography
 import { Homography , loadImage} from 'homography';
 ```
 
-To use as a module in a browser
+To use as a <b>module</b> in the browser (Recommended):
 ```html
 <script type="module">
-  import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@v1.0/Homography.js";
+  import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.1/Homography.js";
 </script>
 ```
+
+If you don't need to perform <b>Piecewise Affine Transforms</b>, you can also use a very lightweight UMD build that will expose the <code>homography</code> global variable and will charge faster:
+```js
+<script src=""https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.1/HomographyLightweight.min.js""></script>
+...
+// And then in your script
+const myHomography = new homography.Homography();
+// Remember to don't override the homography variable by naming your object "homography"
+```
+
+
 ## Usage
 ### In the Browser
 Perform a basic <b>Piecewise Affine Transform</b> from four source points.
@@ -40,11 +51,11 @@ Perform a basic <b>Piecewise Affine Transform</b> from four source points.
     const dstPoints = [[1/5, 1/5], [0, 1/2], [1, 0], [6/8, 6/8]];
     
     // Create a Homography object for a "piecewiseaffine" transform (it could be reused later)
-    const homography = new Homography("piecewiseaffine");
+    const myHomography = new Homography("piecewiseaffine");
     // Set the reference points
-    homography.setReferencePoints(srcPoints, dstPoints);
+    myHomography.setReferencePoints(srcPoints, dstPoints);
     // Warp your image
-    const resultImage = homography.warp(image);
+    const resultImage = myHomography.warp(image);
     ...
 ```
 
@@ -63,9 +74,9 @@ Perform a complex <b>Piecewise Affine Transform</b> from a large set of <code>po
         }    
     }
     // Set the reference points (reuse the previous Homography object)
-    homography.setReferencePoints(srcPoints, dstPoints);
+    myHomography.setReferencePoints(srcPoints, dstPoints);
     // Warp your image. As not image is given, it will reuse the one used for the previous example.
-    const resultImage = homography.warp();
+    const resultImage = myHomography.warp();
     ...
     
 ```
@@ -80,9 +91,9 @@ Perform a simple <b>Affine Transform</b> and apply it on a <code>HTMLElement</co
     const dstPoints = [[0, 0], [1/2, 1], [1, 1/8]];
     
     // Don't specify the type of transform to apply, so let the library decide it by itself. 
-    const homography = new Homography(); // Default transform value is "auto".
+    const myHomography = new Homography(); // Default transform value is "auto".
     // Apply the transform over an HTMLElement from the DOM.
-    identityHomography.transformHTMLElement(document.getElementById("inputText"), squarePoints, rectanglePoints);
+    myHomography.transformHTMLElement(document.getElementById("inputText"), squarePoints, rectanglePoints);
     ...
 ```
 <p align="center"><img src="./Documentation/exampleImages/AffineTransformOnHTMLElement.PNG" width="30%"></p>
@@ -95,10 +106,10 @@ const ctx = document.getElementById("exampleCanvas").getContext("2d");
 const srcPoints = [[0, 0], [0, h], [w, 0], [w, h]];
 let dstPoints = [[0, 0], [0, h], [w, 0], [w, h]];
 // Create the homography object (it is not necessary to set transform as "projective" as it will be automatically detected)
-const homography = new Homography(); 
+const myHomography = new Homography(); 
 // Set the static parameters of all the transforms sequence (it will improve the performance of subsequent warpings)
-homography.setSourcePoints(srcPoints);
-homography.setImage(inputImg);
+myHomography.setSourcePoints(srcPoints);
+myHomography.setImage(inputImg);
 
 // Set the parameters for building the future dstPoints at each frame (5 movements of 50 frames each one)
 const framesPerMovement = 50;
@@ -117,8 +128,8 @@ for(let movement = 0; movement<movements.length; movement++){
         }
         
         // Update the destiny points and calculate the new warping. 
-        homography.setDestinyPoints(dstPoints);
-        const img = homography.warp(); //No parameters warp will reuse the previously setted image
+        myHomography.setDestinyPoints(dstPoints);
+        const img = myHomography.warp(); //No parameters warp will reuse the previously setted image
         // Clear the canvas and draw the new image (using putImageData instead of drawImage for performance reasons)
         ctx.clearRect(0, 0, w, h);
         ctx.putImageData(img, Math.min(dstPoints[0][0], dstPoints[2][0]), Math.min(dstPoints[0][1], dstPoints[2][1]));
@@ -142,13 +153,13 @@ import fs from 'fs';
 // Define the source and destiny points
 const sourcePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
 const dstPoints = [[1/10, 1/2], [0, 1], [9/10, 1/2], [1, 1]];
-// Create the homography object and set the reference points
-const homography = new Homography("projective") // We could not specify "projective" and it would detect it. 
-homography.setReferencePoints(sourcePoints, dstPoints);
+// Create the Homography object and set the reference points
+const myHomography = new Homography("projective") // We could not specify "projective" and it would detect it. 
+myHomography.setReferencePoints(sourcePoints, dstPoints);
 // Here, in backend we can use `await loadImage(<img_path>)` instead of an HTMLImageElement 
-homography.setImage(await loadImage('./testImg.png'));
+myHomography.setImage(await loadImage('./testImg.png'));
 // And when warping, we get a pngImage from the 'pngjs2' package instead of an ImageData
-const pngImage = homography.warp();
+const pngImage = myHomography.warp();
 // Just for visualizing the results, we write it in a file.
 pngImage.pipe(fs.createWriteStream("transformedImage.png"))
 ```
