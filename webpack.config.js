@@ -3,8 +3,9 @@ module.exports = {
     output : {
         path : __dirname,
         filename : 'output.js',
+        
         library: {
-            name : "Homography",
+            name : "homography",
             type : "umd"
         },
         }

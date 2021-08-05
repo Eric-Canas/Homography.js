@@ -23,15 +23,15 @@
 
 /* Node vs Browser differences. If uploading the code for browser set IS_NODE to false and comment this In Node part. If uploading code for node
     set IS_NODE to true and comment the In JS part. NOTE: I know that it is a very ugly. I will find a better solution soon*/
-const IS_NODE = true;
+const IS_NODE = false;
 // In NODE
-    import Delaunator from 'delaunator';
-    import PNG from 'pngjs2';
-    import pkg from 'canvas';
-    const {createCanvas, loadImage} = pkg;
-    export {loadImage};
+    //import Delaunator from 'delaunator';
+    //import PNG from 'pngjs';
+    //import pkg from 'canvas';
+    //const {createCanvas, loadImage} = pkg;
+    //export {loadImage};
 // In JS
-    //import Delaunator from 'https://cdn.skypack.dev/delaunator@5.0.0';
+    import Delaunator from 'https://cdn.skypack.dev/delaunator@5.0.0';
 
     
 const availableTransforms = ['auto', 'piecewiseaffine', 'affine', 'projective'];

@@ -11,7 +11,7 @@ const homography = new Homography()
 homography.setReferencePoints(sourcePoints, dstPoints);
 // Here, in backend we can use `await loadImage(<img_path>)` instead of an HTMLImageElement 
 homography.setImage(await loadImage('./testImgLogoBlack.png'));
-// And when warping, we get a pngImage from the 'pngjs2' package instead of an ImageData
+// And when warping, we get a pngImage from the 'pngjs' package instead of an ImageData
 const pngImage = homography.warp();
 // Just for visualizing the results, we write it in a file.
 pngImage.pipe(fs.createWriteStream("transformedImage.png"))

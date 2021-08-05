@@ -1,7 +1,7 @@
 {
-  "name": "homography-js",
-  "version": "1.0.0",
-  "description": "High-Performance library for image homographies",
+  "name": "homography",
+  "version": "1.0.2",
+  "description": "Perform Affine, Projective or Piecewise Affine transformations over any Image or HTMLElement from only a set of reference points. High-Performance and easy-to-use.",
   "main": "Homography.js",
   "type": "module",
   "directories": {
@@ -10,26 +10,37 @@
   "dependencies": {
     "canvas": "^2.8.0",
     "delaunator": "^5.0.0",
-    "pngjs2": "^2.0.0"
+    "pngjs": "^6.0.0"
   },
   "devDependencies": {
-    "fs": "0.0.1-security",
-    "webpack": "^5.48.0",
-    "webpack-cli": "^4.7.2"
+    "fs": "0.0.1-security"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node ./test/nodeTest.js"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Eric-Canas/Homography.js.git"
   },
+  "files": [
+    "Homography.js"
+  ],
   "keywords": [
     "homography",
-    "computer",
-    "vision"
+    "computer-vision",
+    "projective-transform",
+    "piecewise-affine-transform",
+    "affine-transform",
+    "perspective-transform",
+    "fast",
+    "easy-to-use",
+    "node-js",
+    "javascript",
+    "image-manipulation",
+    "2d",
+    "warp"
   ],
-  "author": "Eric Cañas",
+  "author": "Eric-Canas",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/Eric-Canas/Homography.js/issues"
