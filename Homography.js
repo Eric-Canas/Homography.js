@@ -447,6 +447,7 @@ class Homography {
             else 
                 return output_img;
         } else {
+            
             let pngImage = new PNG.PNG({width: this._objectiveWidth, height: this._objectiveHeight})
             pngImage.data = Buffer.from(output_img);
             pngImage.pack();
