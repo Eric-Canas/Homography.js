@@ -12,9 +12,15 @@
   <li>Support for running in the backend with Node.js.</li>
 </ul>
 
-## Installation
+## Install
 
+Via npm for Node.js for a Node module
 
+```js
+$ npm install homography
+... 
+import { Homography , loadImage} from 'homography';
+```
 ## Usage
 ### In the Browser
 Perform a basic <b>Piecewise Affine Transform</b> from four source points.
@@ -118,9 +124,11 @@ for(let movement = 0; movement<movements.length; movement++){
 
 ### With Node.js
 
+Make a "projective" transform in a node module (.mjs)
+
 ```js
 // Import the Homography class and the loadImage function 
-import { Homography , loadImage} from 'homography-js';
+import { Homography , loadImage} from 'homography';
 // Import the file stream just for saving the image in some place when warped
 import fs from 'fs';
 
@@ -128,7 +136,7 @@ import fs from 'fs';
 const sourcePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
 const dstPoints = [[1/10, 1/2], [0, 1], [9/10, 1/2], [1, 1]];
 // Create the homography object and set the reference points
-const homography = new Homography()
+const homography = new Homography("projective") // We could not specify "projective" and it would detect it. 
 homography.setReferencePoints(sourcePoints, dstPoints);
 // Here, in backend we can use `await loadImage(<img_path>)` instead of an HTMLImageElement 
 homography.setImage(await loadImage('./testImg.png'));
