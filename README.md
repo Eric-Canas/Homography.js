@@ -14,12 +14,19 @@
 
 ## Install
 
-Via npm for Node.js for a Node module
+Via npm for Node.js (Node module)
 
 ```js
 $ npm install homography
 ... 
 import { Homography , loadImage} from 'homography';
+```
+
+To use as a module in a browser
+```html
+<script type="module">
+  import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@v1.0/Homography.js";
+</script>
 ```
 ## Usage
 ### In the Browser
