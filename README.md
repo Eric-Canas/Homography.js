@@ -1,6 +1,6 @@
 
-# <img src="./Documentation/HomographyJSLogoWhite.png" height=25px> Homography.js
-<img src="./Documentation/HomographyJSLogo.png" width="20%" align="left"> Homography.js is a lightweight <a href="#performance">High-Performance</a> library for implementing homographies in Javascript or Node.js. It is designed to be easy-to-use (even for developers that are not familiar with Computer Vision), and able to run in real time applications (even in low-spec devices such as budget smartphones). It allows you to perform <a href="https://en.wikipedia.org/wiki/Affine_transformation" target="_blank">Affine</a>, <a href="https://en.wikipedia.org/wiki/Homography" target="_blank">Projective</a> or <a href="https://en.wikipedia.org/wiki/Piecewise_linear_function" target="_blank">Piecewise Affine</a> warpings over any <code>Image</code> or <code>HTMLElement</code> in your application by only setting a small set of reference points. Additionally, Image warpings can be made persistent (independent of any CSS property), so they can be easily drawn in a canvas, mixed or downloaded. Homography.js is built in a way that frees the user from all the <i>pain-in-the-ass</i> details of homography operations, such as thinking about output dimensions, input coordinate ranges, dealing with unexpected shifts, pads, crops or unfilled pixels in the output image or even knowing what a <a href="https://en.wikipedia.org/wiki/Transformation_matrix">Transform Matrix</a> is.
+# <img src="./Documentation/logo/HomographyJSLogoWhite.png" height=25px> Homography.js
+<img src="./Documentation/logo/HomographyJSLogo.png" width="20%" align="left"> Homography.js is a lightweight <a href="#performance">High-Performance</a> library for implementing homographies in Javascript or Node.js. It is designed to be easy-to-use (even for developers that are not familiar with Computer Vision), and able to run in real time applications (even in low-spec devices such as budget smartphones). It allows you to perform <a href="https://en.wikipedia.org/wiki/Affine_transformation" target="_blank">Affine</a>, <a href="https://en.wikipedia.org/wiki/Homography" target="_blank">Projective</a> or <a href="https://en.wikipedia.org/wiki/Piecewise_linear_function" target="_blank">Piecewise Affine</a> warpings over any <code>Image</code> or <code>HTMLElement</code> in your application by only setting a small set of reference points. Additionally, Image warpings can be made persistent (independent of any CSS property), so they can be easily drawn in a canvas, mixed or downloaded. Homography.js is built in a way that frees the user from all the <i>pain-in-the-ass</i> details of homography operations, such as thinking about output dimensions, input coordinate ranges, dealing with unexpected shifts, pads, crops or unfilled pixels in the output image or even knowing what a <a href="https://en.wikipedia.org/wiki/Transformation_matrix">Transform Matrix</a> is.
 
 ## Features
 <ul>
@@ -166,6 +166,26 @@ pngImage.pipe(fs.createWriteStream("transformedImage.png"))
 
 <p align="center"><img src="./Documentation/exampleImages/nodeExampleOutput.png" width="30%"></p>
 
+## API Reference
+### new Homography([transform = "auto", width, height])
+Main class for performing geometrical transformations over images.  
+Homography is in charge of performing: Affine, Projective or PiecewiseAffine transformations over images, in a way that is as transparent and simple to the user as possible. It is specially intended for real-time applications. For this reason, this class keeps an internal state for avoiding redundant operations when reused, therefore, critical performance comes when multiple transformations are done over the same image.
+<ul>
+<li><b>[<i>transform = <code>"auto"</code></i>]</b>: String representing the transformation to be done. One of "auto", "affine", "piecewiseaffine" or "projective":
+<ul>
+  <li> <code>"auto"</code> : Transformation will be automatically selected depending on the inputs given. Just take "auto" if you don't know which kind of transform do you need. This is the default value. </li>
+  <li><code>"affine"</code> : A geometrical transformation that ensures that all parallel lines of the input image will be parallel in the output image. It will need exactly three source points to be set (and three destiny points). An affine transformation can only be composed by rotations, scales, shearings and reflections. </li>
+  <li><code>"piecewiseaffine"</code> : A composition of several affine transforms that allows more complex constructions. This transforms generates a mesh of triangles with the source points and finds an independent affine transformation for each one of them. This way, it allows more complex transformation as, for example, sinusoidal forms. It can take any amount (greater than three) of reference points. When "piecewiseaffine" mode is selected, only the parts of the input image within a triangle will appear on the output image. If you want to ensure that the whole image appears in the output, ensure to set include reference point on each corner of the image. </li>
+  <li><code>"projective"</code>: A transformation that shows how the an image change when the point of view of the observer is modified. It takes exactly four source points (and four destiny points). This is the transformation that should be used when looking for perspective modifications. </li>
+  </ul></li>
+  
+  <li><b>[<i>width</i>]</b>: Optional width of the input image. If given, it will resize the input image to that width. Lower widths will imply faster transformations at the cost of lower resolution in the output image, while larger widths will produce higher resolution images at the cost of processing time. If null, it will use the original image width.</li>
+    
+  <li><b>[<i>height</i>]</b>: Optional height of the input image. Same considerations than width.</li>  
+</ul>
+
+ ### Homography.setReferencePoints(srcPoints[, image, width, height])
+
 <h2 id="performance">Performance</h2>
 Benchmark results for every kind of transformation.
 <ul>
@@ -174,7 +194,7 @@ Benchmark results for every kind of transformation.
   <li> <b><i>First frame</i></b> column indicates the time for calculating a single image warping, while <b><i>Rest of Frames</i></b> column indicates the time for calculating each one of multiple different warpings on the same input image. <b><i>Frame Rate</i></b> (<i>1/Rest of Frames</i>) indicates the amount of frames that can be calculated per second. </li>
     <li> <b>You can test</b> the concrete performance of your objective device just by executing the <b><a href="./test/benchmark.html" target="_blank">benchmark.html</a></b>. <i>Take into account that this execution can take some minutes, since it executes 2,000 frames for each single warping experiment, and 200,000 for each CSS experiment</i>.</li>
 </ul>
-  
+ 
 Performance tests on an Average Desktop PC. 
 <table>
 <thead>
