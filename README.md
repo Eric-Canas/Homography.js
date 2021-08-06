@@ -243,7 +243,16 @@ Apply the current <i>Affine</i> or <i>Projective</i> transform over an <code>HTM
   If <i>srcPoints</i> and <i>dstPoints</i> are given, a new transform will be estimated from them. Take into account, that this function work by modifying the <i>CSS</i> <code>trasform</code> propierty, so it will not work for the <code>"piecewiseaffine"</code> option, as <i>CSS</i> does not support <i>Piecewise Affine</i> transforms.
 <ul>
   <li> <b><i>element</i></b> : The <code>HTMLElement</code> to which apply the transform. It can be also an <code>HTMLImageElement</code>. In this case, the difference with <code>warp()</code> will be that the transformation will be not persistent, as it will be applied over its current view (as a style) and not to its beneath image data. Usually, it is enough if the image does not need to be drawn in a canvas or to suffer subsequent transformations.</li>
+  <li> <b>[<i>srcPoints</i>]</b> : <i>Source points</i> of the transform, given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. Just the same as <code>points</code> in <code>setSourcePoints()</code>. If not given, they should have been setted before through <code>setSourcePoints()</code>.</li>
+  <li> <b>[<i>dstPoints</i>]</b> : <i>Destiny points</i> of the transform, also given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. Just the same as <code>points</code> in <code>setDestinyPoints()</code>. If not given, they should have been setted before through <code>setSourcePoints()</code>.</li>
   </ul>
+  
+### Homography.HTMLImageElementFromImageData(imgData[, asPromise = true])
+Transforms an <code>ImageData</code> object in an <code>HTMLImageElement</code>. Remember that <code>ImageData</code> is the output format of <code>warp()</code>.
+<ul>
+  <li> <b><i>imgData</i></b> : <code>ImageData</code> object to convert.
+  <li> <b>[<i>asPromise=true</i>]</b> : If <code>true</code> return a <code>Promise</code> of a <code>HTMLImageElement</code>, if <code>false</code> returns directly a <code>HTMLImageElement</code>. In this case, you will have to wait for the <code>onload</code> event to trigger before using it.</li>
+</ul>
   
 <h2 id="performance">Performance</h2>
 Benchmark results for every kind of transformation.
