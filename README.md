@@ -25,13 +25,13 @@ import { Homography, loadImage } from "homography";
 To use as a <b>module</b> in the browser (Recommended):
 ```html
 <script type="module">
-  import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.1/Homography.js";
+  import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.2/Homography.js";
 </script>
 ```
 
 If you don't need to perform <b>Piecewise Affine Transforms</b>, you can also use a very lightweight UMD build that will expose the <code>homography</code> global variable and will charge faster:
 ```js
-<script src="https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.1/HomographyLightweight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.2/HomographyLightweight.min.js"></script>
 ...
 // And then in your script
 const myHomography = new homography.Homography();
@@ -41,7 +41,7 @@ const myHomography = new homography.Homography();
 
 ## Usage
 ### In the Browser
-Perform a basic <b>Piecewise Affine Transform</b> from four source points.
+Perform a basic <b>Piecewise Affine Transform</b> from four <i>source points</i>.
 ```js
     // Select the image you want to warp
     const image = document.getElementById("myImage");
