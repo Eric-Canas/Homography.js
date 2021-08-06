@@ -381,8 +381,8 @@ function testCSS1(){
 }
 
 function testCSS2(){
-    const perspectivePoints = [[0, 0], [0, 100], [100, 0], [100, 100]];
-    const oppositePerspectivePoints = [[0, 0], [0, 100], [100, 10], [100, 100]];
+    const perspectivePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
+    const oppositePerspectivePoints = [[0, 0], [0, 1], [1, 0.1], [1, 1]];
     // Build he elements
     let div = document.createElement('div');
     div.style.width = '80%';
@@ -421,7 +421,7 @@ function testCSS2(){
     const cssTransform = identityHomography.getTransformationMatrixAsCSS();
     const s1 = performance.now();
     h1.textContent += ` [Estimated in ${((s1-s0)/1000).toFixed(4)} s]`;
-    div2.style.transform = cssTransform;
+    identityHomography.transformHTMLElement(div2);
 
 }
 

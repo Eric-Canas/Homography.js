@@ -383,7 +383,7 @@ class Homography {
     }
 
     /**
-     * Summary.                     Sets the destiny reference points ([[x1, y1], [x2, y2], ...]) of the transform.
+     * Summary.                     Apply the selected transform to an image.
      * 
      * Description.                 Apply the calculated homography to the given image. Output image will have enough width and height for enclosing the whole input image without
      *                              any crop or pad. Any void section of the output image will be transparent. If no image is passed to the function and it was setted before the
@@ -528,9 +528,12 @@ class Homography {
      * @return {String}             String representation of the transformation matrix, that can be directly applied in to the CSS transform property.
      */
 
-    getTransformationMatrixAsCSS(srcPoints = null, dstPoints = null){
+    getTransformationMatrixAsCSS(srcPoints = null, dstPoints = null, width = null, height = null){
+        if (width !== null || height !== null)
+            this._setSrcWidthHeight(width, height);
+        console.log(width, height);
         if (srcPoints !== null)
-            this.setSourcePoints(srcPoints);  
+            this.setSourcePoints(srcPoints, null, width, height);  
         if (dstPoints !== null)
             this.setDestinyPoints(dstPoints);
         
@@ -590,7 +593,8 @@ class Homography {
      */
 
      transformHTMLElement(element, srcPoints = null, dstPoints = null){
-        element.style.transform = this.getTransformationMatrixAsCSS(srcPoints, dstPoints);
+        const elementRect = element.getBoundingClientRect();;
+        element.style.transform = this.getTransformationMatrixAsCSS(srcPoints, dstPoints, elementRect.width, elementRect.height);
      }
 
 
