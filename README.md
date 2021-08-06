@@ -244,7 +244,7 @@ Apply the current <i>Affine</i> or <i>Projective</i> transform over an <code>HTM
 <ul>
   <li> <b><i>element</i></b> : The <code>HTMLElement</code> to which apply the transform. It can be also an <code>HTMLImageElement</code>. In this case, the difference with <code>warp()</code> will be that the transformation will be not persistent, as it will be only applied over its current view (as a <i>style</i>) and not to its beneath <i>image data</i>. Usually, it is enough if the <i>image</i> does not need to be drawn in a <code>canvas</code> or to suffer subsequent transformations.</li>
   <li> <b>[<i>srcPoints</i>]</b> : <i>Source points</i> of the transform, given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. If not given, they should have been set before through <code>setSourcePoints()</code>.</li>
-  <li> <b>[<i>dstPoints</i>]</b> : <i>Destiny points</i> of the transform, also given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. If not given, they should have been set before through <code>setSourcePoints()</code>.</li>
+  <li> <b>[<i>dstPoints</i>]</b> : <i>Destiny points</i> of the transform, also given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. If not given, they should have been set before through <code>setDestinyPoints()</code>.</li>
   </ul>
   
 ### Homography.HTMLImageElementFromImageData(imgData[, asPromise = true])
