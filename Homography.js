@@ -531,7 +531,6 @@ class Homography {
     getTransformationMatrixAsCSS(srcPoints = null, dstPoints = null, width = null, height = null){
         if (width !== null || height !== null)
             this._setSrcWidthHeight(width, height);
-        console.log(width, height);
         if (srcPoints !== null)
             this.setSourcePoints(srcPoints, null, width, height);  
         if (dstPoints !== null)
