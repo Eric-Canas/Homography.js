@@ -19,7 +19,7 @@ Via npm for <b>Node.js</b> (Node module):
 ```js
 $ npm install homography
 ... 
-import { Homography , loadImage} from 'homography';
+import { Homography, loadImage } from "homography";
 ```
 
 To use as a <b>module</b> in the browser (Recommended):
@@ -31,7 +31,7 @@ To use as a <b>module</b> in the browser (Recommended):
 
 If you don't need to perform <b>Piecewise Affine Transforms</b>, you can also use a very lightweight UMD build that will expose the <code>homography</code> global variable and will charge faster:
 ```js
-<script src=""https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.1/HomographyLightweight.min.js""></script>
+<script src="https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.1/HomographyLightweight.min.js"></script>
 ...
 // And then in your script
 const myHomography = new homography.Homography();
@@ -243,8 +243,8 @@ Apply the current <i>Affine</i> or <i>Projective</i> transform over an <code>HTM
   If <b><i>srcPoints</i></b> and <b><i>dstPoints</i></b> are given, a new transform will be estimated from them. Take into account, that this function work by modifying the <i>CSS</i> <code>trasform</code> property, so it will not work for the <code>"piecewiseaffine"</code> option, as <i>CSS</i> does not support <i>Piecewise Affine</i> transforms.
 <ul>
   <li> <b><i>element</i></b> : The <code>HTMLElement</code> to which apply the transform. It can be also an <code>HTMLImageElement</code>. In this case, the difference with <code>warp()</code> will be that the transformation will be not persistent, as it will be only applied over its current view (as a <i>style</i>) and not to its beneath <i>image data</i>. Usually, it is enough if the <i>image</i> does not need to be drawn in a <code>canvas</code> or to suffer subsequent transformations.</li>
-  <li> <b>[<i>srcPoints</i>]</b> : <i>Source points</i> of the transform, given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. Just the same as <b><i>points</i></b> in <code>setSourcePoints()</code>. If not given, they should have been setted before through <code>setSourcePoints()</code>.</li>
-  <li> <b>[<i>dstPoints</i>]</b> : <i>Destiny points</i> of the transform, also given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. Just the same as <b><i>points</i></b> in <code>setDestinyPoints()</code>. If not given, they should have been setted before through <code>setSourcePoints()</code>.</li>
+  <li> <b>[<i>srcPoints</i>]</b> : <i>Source points</i> of the transform, given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. If not given, they should have been set before through <code>setSourcePoints()</code>.</li>
+  <li> <b>[<i>dstPoints</i>]</b> : <i>Destiny points</i> of the transform, also given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. If not given, they should have been set before through <code>setDestinyPoints()</code>.</li>
   </ul>
   
 ### Homography.HTMLImageElementFromImageData(imgData[, asPromise = true])
