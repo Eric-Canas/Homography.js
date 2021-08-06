@@ -1,0 +1,49 @@
+{
+  "name": "homography",
+  "version": "1.0.2",
+  "description": "Perform Affine, Projective or Piecewise Affine transformations over any Image or HTMLElement from only a set of reference points. High-Performance and easy-to-use.",
+  "main": "Homography.js",
+  "type": "module",
+  "directories": {
+    "test": "test"
+  },
+  "dependencies": {
+    "canvas": "^2.8.0",
+    "delaunator": "^5.0.0",
+    "pngjs": "^6.0.0"
+  },
+  "devDependencies": {
+    "fs": "0.0.1-security"
+  },
+  "scripts": {
+    "test": "node ./test/nodeTest.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Eric-Canas/Homography.js.git"
+  },
+  "files": [
+    "Homography.js"
+  ],
+  "keywords": [
+    "homography",
+    "computer-vision",
+    "projective-transform",
+    "piecewise-affine-transform",
+    "affine-transform",
+    "perspective-transform",
+    "fast",
+    "easy-to-use",
+    "node-js",
+    "javascript",
+    "image-manipulation",
+    "2d",
+    "warp"
+  ],
+  "author": "Eric-Canas",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Eric-Canas/Homography.js/issues"
+  },
+  "homepage": "https://github.com/Eric-Canas/Homography.js#readme"
+}
