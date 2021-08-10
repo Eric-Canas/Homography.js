@@ -129,6 +129,7 @@ class Homography {
         // Allocate some auxiliar memory for avoiding to allocate any new memory during the "piecewiseaffine" matrix calculations 
         this._auxSrcTriangle = new Float32Array(3*dims);
         this._auxDstTriangle = new Float32Array(3*dims);
+        this._initialTriangles = null;
     }
 
     /**
@@ -259,14 +260,14 @@ class Homography {
         // In case that no width or height were given, but points were already in image coordinates, the "piecewiseaffine" correspondence matrix is still calculable.
         if (this.transform === 'piecewiseaffine' && this._trianglesCorrespondencesMatrix === null){
             // Unset any previous information about Piecewise Affine auxiliar matrices, as they are not reutilizable when source points are modified.
-            this._triangles = null;
+            this._triangles = this._initialTriangles;
             this._piecewiseMatrices = null;
             // If there is information for calculating the auxiliar piecewise matrices, calculate them
             if (!this._srcPointsAreNormalized || (this._width > 0 && this._height > 0)){
                 // Set all the parameters that can be already set
                 this._setPiecewiseAffineTransformParameters();
             // Otherwise calculate only the tringles mesh, that is the unique that can be actually calculated.
-            } else {
+            } else if(this._triangles === null){
                 this._triangles = Delaunay(this._srcPoints);
             }
         }
@@ -303,8 +304,13 @@ class Homography {
         }
         
         // Sets the image as a flat Uint8ClampedArray, for dealing fast with it. It will also resize the image if needed.
-        this._HTMLImage = image;
-        this._image = this._getImageAsRGBAArray(image);
+        // If it is already ImageData save it, else convert it
+        if (ArrayBuffer.isView(image.data)){
+            this._image = image.data;
+        } else {
+            this._HTMLImage = image;
+            this._image = this._getImageAsRGBAArray(image);
+        }
 
         // If source points are already set, now it is possible to calculate the "piecewiseaffine" parameters if needed.
         if(this._srcPoints !== null && this.transform === 'piecewiseaffine'){
@@ -408,7 +414,7 @@ class Homography {
      *                                                directly drawn on canvas by using context.putImageData(imgData, x, y).
      */
 
-     warp(image = null, asHTMLPromise = false){
+     warp(image = null, asHTMLPromise = false, applyAlwaysInverse = false){
         // If the image was given, sets it internally (It will also recalculate any information that depends of it).
         if (image !== null){
             this.setImage(image);
@@ -421,12 +427,12 @@ class Homography {
             case 'piecewiseaffine':
                 // If objectiveWidth or objectiveHeight are larger than width or height apply inverse transform, otherwise apply the source to destiny transfrom
                 // Apply also the inverse transform in the reduction case, when the width/height difference is great enough for compensating the overhead of inverse transform
-                output_img = (this._objectiveWidth > this._width || this._objectiveHeight > this._height || this._objectiveWidth*1.2 < this._width || this._objectiveHeight*1.2 < this._height)?
+                output_img = (applyAlwaysInverse || (this._objectiveWidth > this._width || this._objectiveHeight > this._height || this._objectiveWidth*1.2 < this._width || this._objectiveHeight*1.2 < this._height))?
                                                             this._inversePiecewiseAffineWarp(this._image) : this._piecewiseAffineWarp(this._image);
                 break;
             case 'affine':
                 // If objectiveWidth or objectiveHeight are larger than width or height apply inverse transform, otherwise apply the source to destiny transfrom 
-                output_img = (this._objectiveWidth !== this._width || this._objectiveHeight !== this._height)?
+                output_img = (applyAlwaysInverse || (this._objectiveWidth !== this._width || this._objectiveHeight !== this._height))?
                                                                     this._inverseGeometricWarp(this._image) : this._geometricWarp(this._image);
                 break;
             case 'projective':
@@ -495,7 +501,6 @@ class Homography {
         img.height = this._objectiveHeight;
         if (previousCanvasWidth !== null) {this._hiddenCanvas.width = previousCanvasWidth;}
         if (previousCanvasHeight !== null) {this._hiddenCanvas.height = previousCanvasHeight;}
-        //document.body.append(img);
         if (asPromise){
             return new Promise((resolve, reject) => {
                 img.onload = () => {resolve(img);};
@@ -505,6 +510,34 @@ class Homography {
             return img;
         }
     }
+
+    /**
+     * Summary.                     Transforms an Image from its ImageData respresentation to an HTMLImageElement. NOTE: Remember to await for the promise to be resolved
+     *                              (if asPromise is true (default)) or to the "onload" event (if asPromise is false).
+     * 
+     * Description.                 In performance critical applications such as, for example, real-time applications based on videoStreams it should be avoided when
+     *                              possible as this transformation could decrease the overall framerate. Instead, if you need to draw the result image in a canvas,
+     *                              try to do it directly through context.putImageData(imgData, x, y).
+     *                               
+     * 
+     * @param {ImageData}  imgData                            Image to be transformed to an HTMLImageElement.
+     * 
+     * @param {Boolean}    [asPromise = true]                 If true (default), returns a Promise<HTMLImageElement> that ensures that the image is already loaded when resolved.
+     *                                                        If false, directly returns the HTMLImageElement. In this case, the user must take care of not using it before the
+     *                                                        "onload" event is triggered. 
+     *  
+     * @return {HTMLImageElement|Promise<HTMLImageElement>}   HTMLImageElement (or promise of it) containing the Image inside in the imgData buffer. This HTMLImageElement,
+     *                                                        will also have the same width and height than this imgData buffer.
+     */
+
+     setTriangles(triangles)
+     {
+         this._triangles = triangles;
+         if ((!this._srcPointsAreNormalized || (this._width > 0 && this._height > 0)) && this._srcPoints !== null ){
+            // Set all the parameters that can be already set
+            this._setPiecewiseAffineTransformParameters();
+        }
+     }
 
     /**
      * Summary.                     Get the current Affine or Projective transform as a string that can be directly applied in CSS. If new Source and/or Destiny Points
@@ -1014,7 +1047,7 @@ class Homography {
         const srcRowLenght = this._width<<2;
         const dstRowLenght = this._objectiveWidth<<2;
         const inverseTriangleCorrespondenceMatrix = this._buildInverseTrianglesCorrespondencesMatrix();
-        const triangleCorrespondenceMatrixWidth = this._objectiveWidth-this._xOutputOffset;
+        const triangleCorrespondenceMatrixWidth = this._objectiveWidth;
         let inversePiecewiseMatrices = []
         for (let i=0; i<this._piecewiseMatrices.length; i++){
             inversePiecewiseMatrices.push(inverseAffineMatrix(this._piecewiseMatrices[i]));
@@ -1027,7 +1060,7 @@ class Homography {
                 const inTriangle = inverseTriangleCorrespondenceMatrix[(y-this._yOutputOffset)*triangleCorrespondenceMatrixWidth+(x-this._xOutputOffset)]
                 if (inTriangle >= 0){
                     let [srcX, srcY] = applyAffineTransformToPoint(inversePiecewiseMatrices[inTriangle], x, y);
-                    if (srcX >= 0 && srcX < this._width && srcY >= 0 && srcY < this._height){
+                    if (srcX >= this._minSrcX && srcX < this._width+this._minSrcX && srcY >= this._minSrcY && srcY < this._height+this._minSrcY){
                         srcX = Math.round(srcX); srcY = Math.round(srcY);
                         const srcIdx = (srcY*srcRowLenght)+(srcX<<2);
                         const dstIdx = ((y-this._yOutputOffset)*dstRowLenght)+((x-this._xOutputOffset)<<2);
