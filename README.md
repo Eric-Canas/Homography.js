@@ -25,13 +25,13 @@ import { Homography, loadImage } from "homography";
 To use as a <b>module</b> in the browser (Recommended):
 ```html
 <script type="module">
-  import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.2/Homography.js";
+  import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.3/Homography.js";
 </script>
 ```
 
 If you don't need to perform <b>Piecewise Affine Transforms</b>, you can also use a very lightweight UMD build that will expose the <code>homography</code> global variable and will charge faster:
 ```js
-<script src="https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.2/HomographyLightweight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.3/HomographyLightweight.min.js"></script>
 ...
 // And then in your script
 const myHomography = new homography.Homography();
