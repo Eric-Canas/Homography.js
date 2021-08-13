@@ -14,6 +14,22 @@
 
 ## Install
 
+To use as a <b>module</b> in the browser (Recommended):
+```html
+<script type="module">
+  import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.4/Homography.js";
+</script>
+```
+
+If you don't need to perform <b>Piecewise Affine Transforms</b>, you can also use a very lightweight UMD build that will expose the <code>homography</code> global variable and will charge faster:
+```js
+<script src="https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.4/HomographyLightweight.min.js"></script>
+...
+// And then in your script
+const myHomography = new homography.Homography();
+// Remember to don't override the homography variable by naming your object "homography"
+```
+
 Via npm for <b>Node.js</b> (Node module):
 
 ```js
@@ -21,23 +37,6 @@ $ npm install homography
 ... 
 import { Homography, loadImage } from "homography";
 ```
-
-To use as a <b>module</b> in the browser (Recommended):
-```html
-<script type="module">
-  import { Homography } from "https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.3/Homography.js";
-</script>
-```
-
-If you don't need to perform <b>Piecewise Affine Transforms</b>, you can also use a very lightweight UMD build that will expose the <code>homography</code> global variable and will charge faster:
-```js
-<script src="https://cdn.jsdelivr.net/gh/Eric-Canas/Homography.js@1.3/HomographyLightweight.min.js"></script>
-...
-// And then in your script
-const myHomography = new homography.Homography();
-// Remember to don't override the homography variable by naming your object "homography"
-```
-
 
 ## Usage
 ### In the Browser
@@ -191,7 +190,7 @@ Sets the <i>source reference points</i> (<code>[[x1, y1], [x2, y2], ..., [xn, yn
 <ul>
   <li><b><i>points</i></b> : <i>Source points</i> of the transform, given as a <code>ArrayBuffer</code> or <code>Array</code> in the form <code>[x1, y1, x2, y2, ..., xn, yn]</code> or <code>[[x1, y1], [x2, y2], ..., [xn, yn]]</code>. For large set of <i>source points</i>, performance improvements come when using <code>Float32Array</code>. These <i>source points</i> can be declared in <i>image</i> coordinates, (x : [0, width], y : [0, height]) or in normalized coordinates (x : [0.0, 1.0], y : [0.0, 1.0]). In order to allow transforms with <i>upscalings</i> (from x0 to x8), normalized scale is automatically detected when the points <code>Array</code> does not contain any value larger than 8.0. Coordinates with larger numbers are considered to be in image scale (x : [0, width], y : [0, height]). This automatic behaviour can be avoided by using the <b><i>pointsAreNormalized</i></b> parameter. Please note that, if <b><i>width</i></b> and <b><i>height</i></b> parameters are setted and points are given in <i>image</i> coordinates, these <i>image</i> coordinates should be declared in terms of the given <b><i>width</i></b> and <b><i>height</i></b>, instead of the original <i>image</i> <i>width</i>/<i>height</i>).</li>
   
-  <li> <b>[<i>image</i>]</b> : Optional source <i>image</i>, that will be <i>warped</i> later. Given as an <code>HTMLImageElement</code>. Setting this <i>element</i> here will help to advance some calculations, improving the later <i>warping</i> performance. Specially when it is planned to apply multiple transformations (same <i>source points</i> but different <i>destiny points</i>) to the same <i>image</i>. If <b><i>width</i></b> and/or <b><i>height</i></b> are given, the <i>image</i> will be internally rescaled before any transformation. </li>
+  <li> <b>[<i>image</i>]</b> : Optional source <i>image</i>, that will be <i>warped</i> later. Given as an <code>HTMLImageElement</code> or <code>ImageData</code> in the <b>browser</b> version or as the output of <code>await loadImage('path-to-image')</code> in the <b>Node.js</b> version. Setting this <i>element</i> here will help to advance some calculations, improving the later <i>warping</i> performance. Specially when it is planned to apply multiple transformations (same <i>source points</i> but different <i>destiny points</i>) to the same <i>image</i>. If <b><i>width</i></b> and/or <b><i>height</i></b> are given, the <i>image</i> will be internally rescaled before any transformation if it is given as <code>HTMLImageElement</code> (if <i>image</i> is given as <code>ImageData</code> these parameters will be ignored). </li>
   
   <li><b>[<i>width</i>]</b>: Optional <i>width</i> to which rescale the <i>input image</i>. It is equivalent to the <b><i>width</i></b> parameter of the <i>constructor</i>.</li>
   
@@ -220,7 +219,7 @@ This function just makes a call to <code>Homography.setSourcePoints(srcPoints[, 
 Sets the <i>image</i> that will be transformed when <i>warping</i>.  
 Setting the <i>image</i> before the <i>destiny points</i> (call to <code>setDestinyPoints()</code>) and the <i>warping</i> (call to <code>warp()</code>) will help to advance some calculations as well as to avoid future redundant operations when successive calls to <code>setDestinyPoints()->warp()</code> will occur in the future.
 <ul>
-  <li> <b><i>image</i></b> : Source <i>image</i>, that will be warped later. Given as an <code>HTMLImageElement</code>.</li>
+  <li> <b><i>image</i></b> : Source <i>image</i>, that will be warped later. Given as an <code>HTMLImageElement</code> or <code>ImageData</code> in the <b>browser</b> version. If given as ImageData, <b><i>width</i></b> and <b><i>height</i></b> will not be used. In the <b>Node.js</b> it should be the output of <code>await loadImage('path-to-image')</code>.</li>
   
   <li><b>[<i>width</i>]</b>: Optional <i>width</i> to which rescale the given <b><i>image</i></b>. It is equivalent to the <b><i>width</i></b> parameters of the <i>constructor</i> or <code>setSourcePoints()</code>.</li>
   
