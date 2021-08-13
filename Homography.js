@@ -254,7 +254,7 @@ class Homography {
             this._srcPointsAreNormalized = false;
         }
         // If I have the dstPoints setted, try to recalculate the new transform matrix if possible (except for piecewise).
-        if(this._dstPoints !== null && this.transform !== 'piecewise'){
+        if(this._dstPoints !== null && this.transform !== 'piecewiseaffine'){
             this._transformMatrix = calculateTransformMatrix(this.transform, this._srcPoints, this._dstPoints);
         }
         // In case that no width or height were given, but points were already in image coordinates, the "piecewiseaffine" correspondence matrix is still calculable.
@@ -283,34 +283,35 @@ class Homography {
      *                              coming from a videoStream. This performance improvement will specially highligth for the "piecewiseaffine" transform,
      *                              as it is the one that is more computationally expensive.
      * 
-     * @param {HTMLImageElement}  image    Image that will internally saved for future warping (warp()). As an HTMLImageElement if running on the browser,
-     *                                     or as the output of `await loadImage('<path-to-image>')` if running in node.
+     * @param {HTMLImageElement|ImageData}  image    Image that will internally saved for future warping (warp()). As an HTMLImageElement or ImageData if running on the browser,
+     *                                     		 	 or as the output of `await loadImage('<path-to-image>')` if running in node.
      * 
-     * @param {Number}                   [width]  Optional width. Resizes the input image to the given width. If not provided, original image width will be used
-     *                                            (widths lowers than the original image width will improve speed at cost of resolution). It is not recommended
-     *                                            to set widths below the expected output width, since at this point the speed improvement will dissapear and
-     *                                            only resolution will be worsen.
+     * @param {Number}                   	[width]  Optional width. Resizes the input image to the given width. If not provided, original image width will be used
+     *                                               (widths lowers than the original image width will improve speed at cost of resolution). It is not recommended
+     *                                               to set widths below the expected output width, since at this point the speed improvement will dissapear and
+     *                                               only resolution will be worsen.
      * 
-     * @param {Number}                   [height] Optional height. Resizes the input image to the given height. If not provided, original image height will be used
-     *                                            (heights lowers than the original image height will improve speed at cost of resolution). It is not recommended
-     *                                            to set heights below the expected output height, since at this point the speed improvement will dissapear and
-     *                                            only resolution will be worsen.
+     * @param {Number}                      [height] Optional height. Resizes the input image to the given height. If not provided, original image height will be used
+     *                                               (heights lowers than the original image height will improve speed at cost of resolution). It is not recommended
+     *                                               to set heights below the expected output height, since at this point the speed improvement will dissapear and
+     *                                               only resolution will be worsen.
      * 
      */
     setImage(image, width = null, height = null){
         // Set the current width and height of the input. As the width/height given by the user or the original width/height of the image if not given
-        if (this._width === null || this._height === null){
+        if ((this._width === null || this._height === null) && !ArrayBuffer.isView(image.data)){
             this._setSrcWidthHeight((width === null? image.width : width), (height === null? image.height : height));
         }
-        
         // Sets the image as a flat Uint8ClampedArray, for dealing fast with it. It will also resize the image if needed.
         // If it is already ImageData save it, else convert it
         if (ArrayBuffer.isView(image.data)){
             this._image = image.data;
+            this._setSrcWidthHeight(image.width, image.height);
         } else {
             this._HTMLImage = image;
             this._image = this._getImageAsRGBAArray(image);
         }
+
 
         // If source points are already set, now it is possible to calculate the "piecewiseaffine" parameters if needed.
         if(this._srcPoints !== null && this.transform === 'piecewiseaffine'){
@@ -347,7 +348,7 @@ class Homography {
         // Transform it to a typed array for perfomance reasons
         if(!ArrayBuffer.isView(points)) points = new Float32Array(points.flat());
         // Verify that these points matches with the source points
-        if(points.length !== this._srcPoints.length) 
+        if(this._srcPoints !== null && points.length !== this._srcPoints.length) 
             throw(`It must be the same amount of destiny points (${points.length/dims}) than source points (${this._srcPoints.length/dims})`);
         // Set them
         this._dstPoints = points;
@@ -419,7 +420,7 @@ class Homography {
         if (image !== null){
             this.setImage(image);
         } else if (this._image === null){
-            throw("warp() must receive an image if it was not setted before through `setImage(img)` or  `setSrcPoints(points, img)`");
+            throw("warp() must receive an image if it was not setted before through `setImage(img)` or  `setSourcePoints(points, img)`");
         }
         let output_img;
         // Generate an image by applying the selected transform. If output image is larger than input image, apply the Inverse Transform instead in order to avoid holes in it.
