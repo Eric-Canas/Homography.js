@@ -1,6 +1,6 @@
 {
   "name": "homography",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Perform Affine, Projective or Piecewise Affine transformations over any Image or HTMLElement from only a set of reference points. High-Performance and easy-to-use.",
   "main": "Homography.js",
   "type": "module",
@@ -8,12 +8,8 @@
     "test": "test"
   },
   "dependencies": {
-    "canvas": "^2.8.0",
     "delaunator": "^5.0.0",
-    "pngjs": "^6.0.0"
-  },
-  "devDependencies": {
-    "fs": "0.0.1-security"
+    "homography": "^1.5.0"
   },
   "scripts": {
     "test": "node ./test/nodeTest.js"

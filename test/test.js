@@ -34,7 +34,7 @@ function runTests(){
 function test1(){
     const squarePoints = [[0, 0], [0, 0.5], [0.5, 0], [0.5, 0.5], [0.5, 1], [1, 0.5], [1, 1], [0, 1], [1, 0]];
     const squarePointsShifted = [[0, 0], [0, 1], [1, 0], [1, 1], [1, 2], [2, 1], [2, 2], [0, 2], [2, 0]];;
-    let canvasContext = createCanvasContext("Shift (phantom) and Upsample Transform (Most expensive opperation)", w*2, h*2)
+    let canvasContext = createCanvasContext("Shift (phantom) and Upsample Transform (Most expensive operation)", w*2, h*2)
     canvasContext.drawImage(testImg, 0, 0, w, h);
     canvasContext.fill();
     const s0 = performance.now();

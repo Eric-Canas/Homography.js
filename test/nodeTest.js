@@ -1,7 +1,5 @@
 // Import the Homography class and the loadImage function 
-import { Homography , loadImage} from '../Homography.js';
-// Import the file stream just for saving the image in some place when warped
-import fs from 'fs';
+import { Homography } from '../Homography.js';
 
 // Define the source and destiny points
 const sourcePoints = [[0, 0], [0, 1], [1, 0], [1, 1]];
@@ -13,5 +11,3 @@ homography.setReferencePoints(sourcePoints, dstPoints);
 homography.setImage(await loadImage('./testImgLogoBlack.png'));
 // And when warping, we get a pngImage from the 'pngjs' package instead of an ImageData
 const pngImage = homography.warp();
-// Just for visualizing the results, we write it in a file.
-pngImage.pipe(fs.createWriteStream("transformedImage.png"))
