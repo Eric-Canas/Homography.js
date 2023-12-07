@@ -3,7 +3,7 @@
   "version": "1.8.0",
   "description": "Perform Affine, Projective or Piecewise Affine transformations over any Image or HTMLElement from only a set of reference points. High-Performance and easy-to-use.",
   "main": "Homography.js",
-  "type": "commonjs",
+  "type": "module",
   "directories": {
     "test": "test"
   },
